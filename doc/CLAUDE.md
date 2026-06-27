@@ -34,20 +34,28 @@ Defensibility order: Distribution > Correctness > Compliance.
 
 ## Build phases & kill criteria
 
-- **Phase 0** (correctness core): standalone post-processor — transliterator, agreement
-  validator, claims-extractor. KILL: copy editor reviews 200 products → <3% agreement error,
-  0% protected-term transliteration error. If transliteration ≠ 0%, the moat is fake. Stop.
-- **Phase 1**: batch pipeline (CSV/XLSX in → generate → correct → dual-script out → provenance
-  report) + 1 connector (WooCommerce). Run paid pilot.
-- **Phase 2**: domestic connector (Selltico/TAU) + human review/approval queue.
+- **Phase 0** (correctness core) — DONE: transliterator, agreement validator, claims-extractor in
+  `core/` + `lang/sr/`.
+- **Phase 1** (batch pipeline) — DONE: CSV/XLSX in → generate → correct → dual-script out →
+  provenance report, plus a real WooCommerce connector. Run paid pilot.
+- **Phase 2** — IN PROGRESS: human review/approval queue (`pipeline/review.py` + the `review`/
+  `publish` CLI subcommands) is done — nothing publishes without an explicit approve. The domestic
+  connector half is a **named placeholder only**: `connectors/selltico.py` and
+  `connectors/tau_commerce.py` satisfy `Connector` and are selectable via `publish --connector`,
+  but every method raises `NotImplementedError` — no public API documentation exists for either
+  platform. Do NOT fill in real endpoint/auth logic for them without a real API doc or sandbox
+  account in hand; guessing a contract here risks silently corrupting a real store, which is the
+  one thing worse than not building it.
 - **Venture kill criterion**: 3 paid pilots (€2.5k+) from named Serbian retailers before Phase 2.
 
 ## Stack
 
-- Language/runtime: Python 3.11+, stdlib only in `core`/`lang` (no third-party runtime deps yet)
-- Framework: none yet — `pipeline/` and `connectors/` are still empty, Phase 1 work
-- LLM provider: not yet integrated — Phase 0 is the standalone correctness core only
-- DB: none yet
+- Language/runtime: Python 3.11+, stdlib only everywhere (no third-party runtime deps; `anthropic`
+  is an optional extra, lazily imported)
+- Framework: none — CLI is stdlib `argparse` (`pipeline/cli.py`), no web framework
+- LLM provider: `pipeline.generation.AnthropicProvider` (real) / `FakeProvider` (offline, what the
+  whole test suite uses)
+- DB: none — state lives in plain JSON/CSV files under the run's `--out` directory
 - Test runner: pytest
 
 ## Structure
@@ -59,8 +67,13 @@ Defensibility order: Distribution > Correctness > Compliance.
   boundary words), `protected_terms.py` (brand/SKU heuristics), `agreement.py` (gender/number
   ending heuristics), `counting.py` (seed lexicon of noun counting-forms). Clone this directory
   for hr/bs/me/mk later.
-- `pipeline/` — batch generation flow. Not yet built (Phase 1).
-- `connectors/` — platform integrations (woocommerce, magento, selltico, tau). Not yet built (Phase 1/2).
+- `pipeline/` — `ingest.py` → `generation.py` → `correctness.py` → `provenance.py` → `runner.py`
+  (Phase 1 batch flow); `review.py` is the Phase 2 approval-queue data model (`ReviewQueue`,
+  PENDING/APPROVED/REJECTED/PUBLISHED — nothing auto-approves); `cli.py` wires it all into
+  `generate` / `review list|approve|reject` / `publish` subcommands.
+- `connectors/` — `base.py` (the `Connector` Protocol), `woocommerce.py` (real, Phase 1). Phase 2
+  adds `selltico.py` / `tau_commerce.py` — named but `NotImplementedError`-only placeholders, see
+  Build phases above. Magento not started.
 - `tests/` — mirrors the source tree 1:1 (`tests/core/...`, `tests/lang/sr/...`)
 
 Key design pattern used throughout `core/`: a generic engine takes a "pack" (a dataclass of
