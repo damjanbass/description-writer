@@ -9,6 +9,12 @@ description = "Serbian-language catalog correctness & compliance engine for prod
 requires-python = ">=3.11"
 readme = "README.md"
 
+[project.optional-dependencies]
+# Real LLM provider for pipeline.generation.AnthropicProvider. Lazily imported
+# inside the provider so the package imports and the whole test suite run
+# (via FakeProvider) without this installed.
+llm = ["anthropic>=0.40"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["core", "lang", "pipeline", "connectors"]
 
