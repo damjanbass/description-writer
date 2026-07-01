@@ -7,11 +7,13 @@ openpyxl/sample binaries — it exercises exactly the parts our reader walks:
 shared-string table.
 """
 
+import io
+import types
 import zipfile
 
 import pytest
 
-from pipeline.ingest import read_products
+from pipeline.ingest import _read_zip_member, read_products
 
 # --- Minimal XLSX fixture builder ----------------------------------------
 
@@ -288,3 +290,52 @@ class TestErrors:
         path.write_text("", encoding="utf-8")
         with pytest.raises(ValueError, match="Empty CSV"):
             read_products(path)
+
+
+# --- Zip-member size guard (decompression-bomb defence) -------------------
+
+
+class TestZipMemberSizeLimit:
+    def _single_member_zip(self, path, name: str, data: bytes) -> None:
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(name, data)
+
+    def test_declared_size_over_limit_raises(self, tmp_path):
+        # First guard: the central-directory file_size alone exceeds the limit,
+        # so we refuse before inflating a single byte.
+        path = tmp_path / "big.zip"
+        self._single_member_zip(path, "payload.xml", b"x" * 4096)
+        with zipfile.ZipFile(path) as archive:
+            with pytest.raises(ValueError, match="Malformed .xlsx: member"):
+                _read_zip_member(archive, "payload.xml", limit=1024)
+
+    def test_lying_header_bomb_caught_by_streamed_check(self):
+        # The advertised file_size can be forged small; the streamed byte count
+        # is the real guarantee. A fake archive lets the first (getinfo) check
+        # pass while the actual member content dwarfs the limit, so this
+        # isolates and proves the chunked read enforces the cap on its own.
+        class _LyingArchive:
+            def getinfo(self, name):  # forged tiny declared size
+                return types.SimpleNamespace(file_size=1)
+
+            def open(self, name):
+                return io.BytesIO(b"y" * 4096)  # real content over the limit
+
+        with pytest.raises(ValueError, match="Malformed .xlsx: member"):
+            _read_zip_member(_LyingArchive(), "payload.xml", limit=1024)
+
+    def test_member_within_limit_reads_verbatim(self, tmp_path):
+        path = tmp_path / "ok.zip"
+        data = b"<xml>fine</xml>"
+        self._single_member_zip(path, "payload.xml", data)
+        with zipfile.ZipFile(path) as archive:
+            assert _read_zip_member(archive, "payload.xml", limit=1024) == data
+
+    def test_missing_member_raises_key_error(self, tmp_path):
+        # Missing members must surface as KeyError so existing call sites keep
+        # their optional-part handling.
+        path = tmp_path / "empty.zip"
+        self._single_member_zip(path, "payload.xml", b"data")
+        with zipfile.ZipFile(path) as archive:
+            with pytest.raises(KeyError):
+                _read_zip_member(archive, "absent.xml", limit=1024)

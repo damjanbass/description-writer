@@ -57,6 +57,14 @@ _OOXML_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 # possibly-sparse row back into header positions.
 _CELL_COLUMN_RE = re.compile(r"^([A-Z]+)")
 
+# Upper bound on the decompressed size of any single zip member we read from an
+# .xlsx. An .xlsx is untrusted input at the I/O boundary, and `zipfile` will
+# happily inflate a "zip bomb" member far larger than the archive on disk into
+# memory. We cap each member at 64 MB and refuse anything larger — both by the
+# size the zip header advertises and by the bytes we actually inflate, because
+# the advertised `file_size` can be forged.
+_MAX_MEMBER_BYTES = 64 * 1024 * 1024
+
 
 def read_products(path: str | os.PathLike[str]) -> list[ProductRecord]:
     """Read a `.csv` or `.xlsx` catalog into `ProductRecord`s, one per data row.
@@ -127,6 +135,42 @@ def _sniff_delimiter(sample: str, path: str) -> str:
         return ","
 
 
+def _read_zip_member(
+    archive: zipfile.ZipFile, name: str, limit: int = _MAX_MEMBER_BYTES
+) -> bytes:
+    """Read one zip member fully, refusing members that inflate past `limit`.
+
+    Guards the .xlsx boundary against decompression bombs. `archive.read()` is
+    unbounded, so a crafted member can inflate to gigabytes from a tiny archive
+    and exhaust memory. We enforce `limit` twice: first against the size the
+    central directory advertises (`getinfo().file_size`), then against the bytes
+    we actually inflate — the header value can be forged small, so the streamed
+    check is the real guarantee. Both breaches raise `ValueError` in the file's
+    "Malformed .xlsx: ..." style. Missing members raise `KeyError` (from
+    `getinfo`), preserving each call site's existing handling.
+    """
+    if archive.getinfo(name).file_size > limit:
+        raise ValueError(
+            f"Malformed .xlsx: member {name!r} exceeds the {limit}-byte size limit."
+        )
+    chunk_size = 1024 * 1024
+    chunks: list[bytes] = []
+    total = 0
+    with archive.open(name) as member:
+        while True:
+            chunk = member.read(chunk_size)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > limit:
+                raise ValueError(
+                    f"Malformed .xlsx: member {name!r} exceeds the "
+                    f"{limit}-byte size limit."
+                )
+            chunks.append(chunk)
+    return b"".join(chunks)
+
+
 def _read_xlsx_rows(path: str) -> tuple[list[str], list[list[str]]]:
     """Return (header, data_rows) from the first worksheet of an .xlsx file.
 
@@ -142,7 +186,7 @@ def _read_xlsx_rows(path: str) -> tuple[list[str], list[list[str]]]:
         with zipfile.ZipFile(path) as archive:
             shared_strings = _read_shared_strings(archive)
             sheet_name = _first_worksheet_name(archive)
-            sheet_xml = archive.read(sheet_name)
+            sheet_xml = _read_zip_member(archive, sheet_name)
     except zipfile.BadZipFile as exc:
         raise ValueError(f"Malformed .xlsx (not a valid zip): {path!r}.") from exc
     except KeyError as exc:
@@ -171,7 +215,9 @@ def _first_worksheet_name(archive: zipfile.ZipFile) -> str:
     """
     rels = _workbook_rels(archive)
     try:
-        workbook_root = ElementTree.fromstring(archive.read("xl/workbook.xml"))
+        workbook_root = ElementTree.fromstring(
+            _read_zip_member(archive, "xl/workbook.xml")
+        )
     except (KeyError, ElementTree.ParseError):
         workbook_root = None
 
@@ -198,7 +244,9 @@ def _workbook_rels(archive: zipfile.ZipFile) -> dict[str, str]:
     caller treats that as "fall back to the conventional sheet1.xml path".
     """
     try:
-        rels_root = ElementTree.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+        rels_root = ElementTree.fromstring(
+            _read_zip_member(archive, "xl/_rels/workbook.xml.rels")
+        )
     except (KeyError, ElementTree.ParseError):
         return {}
     return {
@@ -233,7 +281,9 @@ def _read_shared_strings(archive: zipfile.ZipFile) -> list[str]:
     if "xl/sharedStrings.xml" not in archive.namelist():
         return []
     try:
-        root = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
+        root = ElementTree.fromstring(
+            _read_zip_member(archive, "xl/sharedStrings.xml")
+        )
     except ElementTree.ParseError as exc:
         raise ValueError("Malformed .xlsx: unreadable sharedStrings.xml.") from exc
 

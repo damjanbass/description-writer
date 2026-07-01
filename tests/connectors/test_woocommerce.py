@@ -12,9 +12,14 @@ ever sent.
 from __future__ import annotations
 
 import base64
+import urllib.error
+import urllib.request
+
+import pytest
 
 from connectors.base import Connector
 from connectors.woocommerce import (
+    _TIMEOUT_SECONDS,
     WooCommerceConnector,
     _basic_auth_header,
     _UrllibTransport,
@@ -241,3 +246,176 @@ class TestDefaultTransportAuth:
             "https://shop.example.com", "ck_abc", "cs_xyz"
         )
         assert isinstance(connector._transport, _UrllibTransport)
+
+
+class TestHttpsEnforcement:
+    """base_url must be HTTPS (http tolerated only for localhost/127.0.0.1)."""
+
+    def test_plain_http_is_rejected(self):
+        with pytest.raises(ValueError):
+            WooCommerceConnector(
+                "http://example.com", "ck", "cs", transport=FakeTransport()
+            )
+
+    def test_https_is_accepted(self):
+        connector = WooCommerceConnector(
+            "https://example.com", "ck", "cs", transport=FakeTransport()
+        )
+        assert connector._base_url == "https://example.com"
+
+    def test_http_localhost_is_accepted(self):
+        connector = WooCommerceConnector(
+            "http://localhost:8080", "ck", "cs", transport=FakeTransport()
+        )
+        assert connector._base_url == "http://localhost:8080"
+
+    def test_http_loopback_ip_is_accepted(self):
+        connector = WooCommerceConnector(
+            "http://127.0.0.1", "ck", "cs", transport=FakeTransport()
+        )
+        assert connector._base_url == "http://127.0.0.1"
+
+    def test_missing_scheme_is_rejected(self):
+        with pytest.raises(ValueError):
+            WooCommerceConnector(
+                "shop.example.com", "ck", "cs", transport=FakeTransport()
+            )
+
+
+class _FakeResponse:
+    """Minimal stand-in for the object `urlopen` yields as a context manager."""
+
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self) -> _FakeResponse:
+        return self
+
+    def __exit__(self, *exc: object) -> bool:
+        return False
+
+
+class _FakeUrlopen:
+    """Replays queued outcomes for `urllib.request.urlopen`, recording timeouts.
+
+    Each queued outcome is either an `Exception` to raise or a `bytes` body to
+    return wrapped in a `_FakeResponse`. Every call's `timeout` argument is
+    recorded so tests can assert the connector passes `_TIMEOUT_SECONDS`.
+    """
+
+    def __init__(self, outcomes: list[object]) -> None:
+        self._outcomes = list(outcomes)
+        self.timeouts: list[object] = []
+
+    def __call__(self, req: object, timeout: object = None) -> _FakeResponse:
+        self.timeouts.append(timeout)
+        outcome = self._outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return _FakeResponse(outcome)
+
+
+class _RecordingSleep:
+    """No-op stand-in for `time.sleep` that records the durations requested."""
+
+    def __init__(self) -> None:
+        self.calls: list[float] = []
+
+    def __call__(self, seconds: float) -> None:
+        self.calls.append(seconds)
+
+
+def _http_error(code: int) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError("https://shop.example.com", code, "err", {}, None)
+
+
+class TestTransportRetry:
+    """Retry/backoff behaviour of the default stdlib transport."""
+
+    def test_network_error_is_retried_then_succeeds(self, monkeypatch):
+        fake = _FakeUrlopen(
+            [
+                urllib.error.URLError("boom"),
+                urllib.error.URLError("boom"),
+                b'{"ok": true}',
+            ]
+        )
+        monkeypatch.setattr(urllib.request, "urlopen", fake)
+        sleep = _RecordingSleep()
+        transport = _UrllibTransport("ck", "cs", sleep=sleep)
+
+        result = transport.request("GET", "https://shop.example.com/x")
+
+        assert result == {"ok": True}
+        # Two failures -> two backoff sleeps, in order.
+        assert sleep.calls == [0.5, 1.0]
+
+    def test_http_500_is_retried_then_succeeds(self, monkeypatch):
+        fake = _FakeUrlopen([_http_error(500), b"{}"])
+        monkeypatch.setattr(urllib.request, "urlopen", fake)
+        sleep = _RecordingSleep()
+        transport = _UrllibTransport("ck", "cs", sleep=sleep)
+
+        result = transport.request("GET", "https://shop.example.com/x")
+
+        assert result == {}
+        assert sleep.calls == [0.5]
+
+    def test_http_429_is_retried_then_succeeds(self, monkeypatch):
+        fake = _FakeUrlopen([_http_error(429), b"{}"])
+        monkeypatch.setattr(urllib.request, "urlopen", fake)
+        sleep = _RecordingSleep()
+        transport = _UrllibTransport("ck", "cs", sleep=sleep)
+
+        result = transport.request("GET", "https://shop.example.com/x")
+
+        assert result == {}
+        assert sleep.calls == [0.5]
+
+    def test_http_401_fails_immediately_without_retry(self, monkeypatch):
+        fake = _FakeUrlopen([_http_error(401)])
+        monkeypatch.setattr(urllib.request, "urlopen", fake)
+        sleep = _RecordingSleep()
+        transport = _UrllibTransport("ck", "cs", sleep=sleep)
+
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            transport.request("GET", "https://shop.example.com/x")
+
+        assert excinfo.value.code == 401
+        # No retries and no sleeps: a single attempt was made.
+        assert sleep.calls == []
+        assert len(fake.timeouts) == 1
+
+    def test_exhausted_retries_reraise_last_error(self, monkeypatch):
+        fake = _FakeUrlopen(
+            [
+                urllib.error.URLError("boom"),
+                urllib.error.URLError("boom"),
+                urllib.error.URLError("boom"),
+            ]
+        )
+        monkeypatch.setattr(urllib.request, "urlopen", fake)
+        sleep = _RecordingSleep()
+        transport = _UrllibTransport("ck", "cs", sleep=sleep)
+
+        with pytest.raises(urllib.error.URLError):
+            transport.request("GET", "https://shop.example.com/x")
+
+        # Three attempts total -> two backoff sleeps before giving up.
+        assert sleep.calls == [0.5, 1.0]
+        assert len(fake.timeouts) == 3
+
+
+class TestTransportTimeout:
+    def test_urlopen_is_called_with_timeout(self, monkeypatch):
+        fake = _FakeUrlopen([b"{}"])
+        monkeypatch.setattr(urllib.request, "urlopen", fake)
+        transport = _UrllibTransport("ck", "cs", sleep=_RecordingSleep())
+
+        transport.request("GET", "https://shop.example.com/x")
+
+        assert fake.timeouts == [_TIMEOUT_SECONDS]
+        assert _TIMEOUT_SECONDS == 30

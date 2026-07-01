@@ -62,11 +62,36 @@ from __future__ import annotations
 
 import base64
 import json as _json
+import time
+import urllib.error
 import urllib.request
+from collections.abc import Callable
 from typing import Protocol, runtime_checkable
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 from pipeline.types import DualScript, ProductRecord, Script
+
+# Network read/connect timeout, in seconds, applied to every HTTP call. Without
+# it `urlopen` can block indefinitely on an unresponsive store, wedging a batch
+# run; 30s is generous for a single WooCommerce list/PUT while still bounded.
+_TIMEOUT_SECONDS = 30
+
+# Retry policy for the default transport. We make up to `_MAX_ATTEMPTS` tries,
+# sleeping `_BACKOFF_SECONDS[i]` before the (i+1)-th retry. Only transient
+# failures are retried (network errors, HTTP 5xx, HTTP 429); other 4xx are
+# caller/permanent errors and fail immediately.
+_MAX_ATTEMPTS = 3
+_BACKOFF_SECONDS = (0.5, 1.0)
+
+
+def _is_retryable_status(code: int) -> bool:
+    """True for HTTP statuses worth retrying: 429 (rate limit) and any 5xx."""
+    return code == 429 or 500 <= code < 600
+
+# Hostnames for which plain `http` is tolerated as a development convenience;
+# every other host must use `https` (WooCommerce Basic auth sends credentials in
+# a header, so an unencrypted transport would leak them).
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1"})
 
 # How many products to request per list call. WooCommerce caps `per_page` at
 # 100; we ask for the max so the catalog is walked in as few round-trips as
@@ -144,8 +169,16 @@ class _UrllibTransport:
     not where the interesting logic — or the tests — sit.
     """
 
-    def __init__(self, consumer_key: str, consumer_secret: str) -> None:
+    def __init__(
+        self,
+        consumer_key: str,
+        consumer_secret: str,
+        *,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
         self._auth_header = _basic_auth_header(consumer_key, consumer_secret)
+        # Injectable so tests can drive the backoff without real delays.
+        self._sleep = sleep
 
     def request(
         self,
@@ -165,9 +198,28 @@ class _UrllibTransport:
         if data is not None:
             headers["Content-Type"] = "application/json"
         req = urllib.request.Request(url, data=data, method=method, headers=headers)
-        with urllib.request.urlopen(req) as response:  # noqa: S310 - URL is our own base_url
-            body = response.read()
-        return _json.loads(body) if body else {}
+
+        # Try up to _MAX_ATTEMPTS times, retrying only transient failures
+        # (network errors, HTTP 5xx, HTTP 429) with a short backoff between
+        # tries. Non-retryable errors (other 4xx) and the final failure are
+        # re-raised unchanged so the caller sees the original exception.
+        for attempt in range(_MAX_ATTEMPTS):
+            try:
+                with urllib.request.urlopen(  # noqa: S310 - URL is our own base_url
+                    req, timeout=_TIMEOUT_SECONDS
+                ) as response:
+                    body = response.read()
+                return _json.loads(body) if body else {}
+            except urllib.error.HTTPError as exc:
+                if attempt + 1 >= _MAX_ATTEMPTS or not _is_retryable_status(exc.code):
+                    raise
+            except urllib.error.URLError:
+                if attempt + 1 >= _MAX_ATTEMPTS:
+                    raise
+            self._sleep(_BACKOFF_SECONDS[attempt])
+
+        # Unreachable: the loop either returns or re-raises on every path.
+        raise AssertionError("retry loop exited without returning or raising")
 
 
 class WooCommerceConnector:
@@ -187,6 +239,23 @@ class WooCommerceConnector:
         *,
         transport: Transport | None = None,
     ) -> None:
+        # Enforce a secure transport before anything else: WooCommerce Basic
+        # auth ships the consumer key/secret in a header, so a non-HTTPS URL
+        # would leak credentials over the wire. Plain http is tolerated only for
+        # localhost/127.0.0.1 as a development convenience.
+        parsed = urlparse(base_url)
+        if not parsed.scheme or not parsed.netloc:
+            raise ValueError(
+                f"base_url must be an absolute URL with scheme and host: {base_url!r}"
+            )
+        if parsed.scheme != "https" and (
+            parsed.scheme != "http" or parsed.hostname not in _LOCAL_HOSTS
+        ):
+            raise ValueError(
+                "base_url must use https (http is allowed only for "
+                f"localhost/127.0.0.1): {base_url!r}"
+            )
+
         # Normalise the base URL once so every endpoint join is a clean
         # f-string. `rstrip("/")` tolerates callers passing a trailing slash.
         self._base_url = base_url.rstrip("/")

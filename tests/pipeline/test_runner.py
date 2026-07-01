@@ -120,6 +120,24 @@ class TestWriteOutputs:
         write_outputs(results, out_dir)
         assert (out_dir / "descriptions.csv").exists()
 
+    def test_neutralizes_csv_formula_injection(self, tmp_path):
+        provider = FakeProvider("Opis bez brojeva.")
+        record = ProductRecord(product_id="=HYPERLINK(1)", attributes={})
+        results = run_batch([record], provider)
+
+        out_dir = tmp_path / "out"
+        write_outputs(results, out_dir)
+
+        # Read the raw cell: the dangerous leading "=" must have been escaped
+        # with a single quote so a spreadsheet app treats it as text, and
+        # stripping that quote recovers the original untrusted value.
+        csv_path = out_dir / "descriptions.csv"
+        with open(csv_path, encoding="utf-8", newline="") as handle:
+            rows = list(csv.reader(handle))
+        data_row = rows[1]
+        assert data_row[0] == "'=HYPERLINK(1)"
+        assert data_row[0].lstrip("'") == "=HYPERLINK(1)"
+
     def test_sanitizes_unsafe_product_id_for_filename(self, tmp_path):
         provider = FakeProvider("Opis bez brojeva.")
         record = ProductRecord(product_id="../../evil", attributes={})

@@ -21,6 +21,7 @@ product (for the compliance audit trail).
 from __future__ import annotations
 
 import csv
+import io
 import os
 import re
 from collections.abc import Iterable
@@ -28,6 +29,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pipeline.correctness import apply_correctness
+from pipeline.fsio import atomic_write_text, neutralize_csv_cell
 from pipeline.generation import Provider, generate_description
 from pipeline.provenance import build_provenance, provenance_to_json
 from pipeline.types import ProductRecord, ProductResult, Script
@@ -136,20 +138,26 @@ def write_outputs(results: Iterable[ProductResult], out_dir: str | os.PathLike[s
 
     results = list(results)
 
+    # Build the CSV in memory (same dialect and `newline=""` behavior as before)
+    # so it can be swapped into place atomically. Every untrusted data cell is
+    # passed through `neutralize_csv_cell` to defuse spreadsheet formula
+    # injection; the header row is composed of literals and needs no escaping.
+    buffer = io.StringIO(newline="")
+    writer = csv.writer(buffer)
+    writer.writerow(["product_id", "latinica", "cirilica", "needs_review"])
+    for result in results:
+        writer.writerow([
+            neutralize_csv_cell(result.record.product_id),
+            neutralize_csv_cell(result.correctness.dual_script.latinica),
+            neutralize_csv_cell(result.correctness.dual_script.cirilica),
+            neutralize_csv_cell(str(result.needs_review)),
+        ])
+
     csv_path = out_path / "descriptions.csv"
-    with open(csv_path, "w", newline="", encoding="utf-8") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(["product_id", "latinica", "cirilica", "needs_review"])
-        for result in results:
-            writer.writerow([
-                result.record.product_id,
-                result.correctness.dual_script.latinica,
-                result.correctness.dual_script.cirilica,
-                result.needs_review,
-            ])
+    atomic_write_text(csv_path, buffer.getvalue(), encoding="utf-8")
 
     for result in results:
         filename = _safe_filename(result.record.product_id) + ".json"
-        (provenance_dir / filename).write_text(
-            provenance_to_json(result.provenance), encoding="utf-8"
+        atomic_write_text(
+            provenance_dir / filename, provenance_to_json(result.provenance), encoding="utf-8"
         )
