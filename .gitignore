@@ -8,3 +8,9 @@ venv/
 .env
 dist/
 build/
+
+# Django web/ project (task 3A)
+web/db.sqlite3
+web/media/
+web/staticfiles/
+*.sqlite3

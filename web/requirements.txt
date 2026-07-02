@@ -1,0 +1,8 @@
+Django>=5.1,<6
+gunicorn
+psycopg[binary]
+django-q2
+cryptography
+whitenoise
+django-ratelimit
+anthropic

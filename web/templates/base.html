@@ -1,0 +1,46 @@
+{% load static %}<!DOCTYPE html>
+<html lang="sr-Latn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Korpus{% endblock %}</title>
+<link rel="stylesheet" href="{% static 'css/korpus-ui.css' %}">
+{% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a href="{% url 'home' %}" class="brand">
+      <span class="brand-mark">К</span>
+      <span class="brand-name">Korpus</span>
+    </a>
+    {% block org_name %}{% endblock %}
+    {% if user.is_authenticated %}
+    <div class="topbar-user">
+      <span class="muted">{{ user.email|default:user.get_username }}</span>
+      <form method="post" action="{% url 'logout' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-ghost">Odjava</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+</header>
+
+{% if messages %}
+<div class="toast-stack">
+  {% for message in messages %}
+  <div class="toast{% if message.level_tag == 'error' %} toast-error{% endif %}">
+    {{ message }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<main class="page">
+  {% block content %}{% endblock %}
+</main>
+
+</body>
+</html>

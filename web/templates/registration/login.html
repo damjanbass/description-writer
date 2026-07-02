@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Prijava — Korpus{% endblock %}
+{% block content %}
+<div class="card" style="max-width: 400px; margin: 64px auto;">
+  <h1 class="page-title" style="margin-bottom: 24px;">Prijava</h1>
+  <form method="post">
+    {% csrf_token %}
+    <div class="field">
+      <label for="id_username">Korisničko ime ili e-pošta</label>
+      <input class="input" type="text" name="username" id="id_username" autofocus required>
+    </div>
+    <div class="field">
+      <label for="id_password">Lozinka</label>
+      <input class="input" type="password" name="password" id="id_password" required>
+    </div>
+    {% if form.errors %}
+    <p class="mono" style="color: var(--danger); margin-bottom: 16px;">
+      Netačno korisničko ime ili lozinka.
+    </p>
+    {% endif %}
+    <button type="submit" class="btn btn-primary" style="width: 100%; margin-bottom: 16px;">
+      Prijavi se
+    </button>
+    <a href="{% url 'password_reset' %}" class="muted">Zaboravljena lozinka?</a>
+    <input type="hidden" name="next" value="{{ next }}">
+  </form>
+</div>
+{% endblock %}

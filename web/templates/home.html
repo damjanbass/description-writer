@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Organizacije — Korpus{% endblock %}
+{% block content %}
+<h1 class="page-title">Organizacije</h1>
+
+{% if orgs %}
+<div class="card-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:16px; margin-top:24px;">
+  {% for org in orgs %}
+  <div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;">
+      <span style="font-weight:700;">{{ org.name }}</span>
+      {% if org.user_role %}
+      <span class="badge mono">{{ org.user_role }}</span>
+      {% endif %}
+    </div>
+    <a href="/app/{{ org.slug }}/batches/" class="btn btn-primary">Otvori →</a>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <p>Nemate još nijednu organizaciju. Kontaktirajte administratora.</p>
+</div>
+{% endif %}
+{% endblock %}
