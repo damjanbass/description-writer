@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Rounded square background -->
+  <rect x="2" y="2" width="60" height="60" rx="12" ry="12" fill="#2F6BFF"/>
+  <!-- White Cyrillic К -->
+  <text x="32" y="42" font-family="Arial, sans-serif" font-size="48" font-weight="800" fill="white" text-anchor="middle">К</text>
+</svg>

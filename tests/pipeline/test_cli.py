@@ -6,7 +6,11 @@ and/or --fake-connector, so the whole pipeline runs offline.
 from __future__ import annotations
 
 import csv
+from pathlib import Path
 
+import pytest
+
+from pipeline import cli, fsio
 from pipeline.cli import main
 from pipeline.review import ReviewStatus, review_queue_from_json
 
@@ -214,3 +218,181 @@ class TestPublish:
         err = capsys.readouterr().err
         assert "no public Selltico API documentation found" in err
         assert _queue(out_dir).get("1").status is ReviewStatus.APPROVED
+
+
+class TestPublishCredentials:
+    """--consumer-key/--consumer-secret: env var fallback, flag precedence,
+    and the argv-visibility warning. Every case stubs `_CONNECTOR_FACTORIES`
+    for "woocommerce" so the real `WooCommerceConnector`/network path is
+    never exercised - only what `_build_connector` resolves and hands it.
+    """
+
+    def _stub_woocommerce_factory(self, monkeypatch):
+        captured: dict[str, str | None] = {}
+
+        def _factory(args):
+            captured["key"] = args.consumer_key
+            captured["secret"] = args.consumer_secret
+            return cli._FakeConnector()
+
+        monkeypatch.setitem(cli._CONNECTOR_FACTORIES, "woocommerce", _factory)
+        return captured
+
+    def test_env_vars_used_when_flags_omitted(self, tmp_path, monkeypatch):
+        _, out_dir = _generate(tmp_path)
+        monkeypatch.setenv("KORPUS_CONSUMER_KEY", "env-key")
+        monkeypatch.setenv("KORPUS_CONSUMER_SECRET", "env-secret")
+        captured = self._stub_woocommerce_factory(monkeypatch)
+
+        exit_code = main(
+            [
+                "publish",
+                "-o",
+                str(out_dir),
+                "--connector",
+                "woocommerce",
+                "--base-url",
+                "https://shop.example.com",
+            ]
+        )
+
+        assert exit_code == 0
+        assert captured["key"] == "env-key"
+        assert captured["secret"] == "env-secret"
+
+    def test_flags_win_over_env_and_warn_without_leaking_values(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        _, out_dir = _generate(tmp_path)
+        monkeypatch.setenv("KORPUS_CONSUMER_KEY", "env-key")
+        monkeypatch.setenv("KORPUS_CONSUMER_SECRET", "env-secret")
+        captured = self._stub_woocommerce_factory(monkeypatch)
+        capsys.readouterr()
+
+        exit_code = main(
+            [
+                "publish",
+                "-o",
+                str(out_dir),
+                "--connector",
+                "woocommerce",
+                "--base-url",
+                "https://shop.example.com",
+                "--consumer-key",
+                "flag-key",
+                "--consumer-secret",
+                "flag-secret",
+            ]
+        )
+
+        assert exit_code == 0
+        assert captured["key"] == "flag-key"
+        assert captured["secret"] == "flag-secret"
+        err = capsys.readouterr().err
+        assert "--consumer-key" in err
+        assert "--consumer-secret" in err
+        assert "flag-key" not in err
+        assert "flag-secret" not in err
+
+    def test_neither_flag_nor_env_var_returns_nonzero(self, tmp_path, monkeypatch):
+        _, out_dir = _generate(tmp_path)
+        monkeypatch.delenv("KORPUS_CONSUMER_KEY", raising=False)
+        monkeypatch.delenv("KORPUS_CONSUMER_SECRET", raising=False)
+
+        exit_code = main(
+            [
+                "publish",
+                "-o",
+                str(out_dir),
+                "--connector",
+                "woocommerce",
+                "--base-url",
+                "https://shop.example.com",
+            ]
+        )
+
+        assert exit_code != 0
+
+
+class TestPublishSavePerItem:
+    def test_saves_on_disk_after_each_success_not_only_at_the_end(self, tmp_path, monkeypatch):
+        _, out_dir = _generate(tmp_path)
+        main(["review", "approve", "1", "-o", str(out_dir)])
+        main(["review", "approve", "2", "-o", str(out_dir)])
+        queue_path = out_dir / "review_queue.json"
+
+        class _PartialFailConnector:
+            def fetch_products(self):
+                return []
+
+            def push_description(self, product_id, dual, *, publish_script=None):
+                if product_id == "2":
+                    # By the time item "2" is attempted, item "1"'s publish
+                    # must already be durable on disk - proving the queue is
+                    # saved per-item, not batched into one save at the end.
+                    on_disk = review_queue_from_json(
+                        queue_path.read_text(encoding="utf-8")
+                    )
+                    assert on_disk.get("1").status is ReviewStatus.PUBLISHED
+                    assert on_disk.get("2").status is ReviewStatus.APPROVED
+                    raise RuntimeError("boom")
+
+        monkeypatch.setattr(cli, "_FakeConnector", lambda: _PartialFailConnector())
+
+        exit_code = main(
+            ["publish", "-o", str(out_dir), "--connector", "woocommerce", "--fake-connector"]
+        )
+
+        assert exit_code == 0
+        final_queue = _queue(out_dir)
+        assert final_queue.get("1").status is ReviewStatus.PUBLISHED
+        assert final_queue.get("2").status is ReviewStatus.APPROVED
+
+
+class TestQueueLocking:
+    """`review approve/reject` and `publish` wrap load->mutate->save in
+    `fsio.file_lock` so two concurrent CLI invocations cannot clobber each
+    other's write. These tests simulate a lock already held by another
+    process (a pre-existing `.lock` sentinel) and confirm the command times
+    out rather than proceeding, leaving the on-disk queue untouched.
+    """
+
+    @staticmethod
+    def _tiny_timeout(original_lock):
+        def _wrapped(path, *, timeout=10.0, poll_interval=0.1):
+            return original_lock(path, timeout=0.2, poll_interval=0.05)
+
+        return _wrapped
+
+    @pytest.mark.parametrize(
+        "argv_suffix",
+        [
+            ["review", "approve", "1"],
+            ["review", "reject", "1"],
+            ["publish", "--connector", "woocommerce", "--fake-connector"],
+        ],
+        ids=["approve", "reject", "publish"],
+    )
+    def test_held_lock_times_out_instead_of_mutating_queue(
+        self, tmp_path, monkeypatch, capsys, argv_suffix
+    ):
+        _, out_dir = _generate(tmp_path)
+        queue_path = out_dir / "review_queue.json"
+        lock_path = Path(str(queue_path) + ".lock")
+        lock_path.write_text("", encoding="utf-8")
+        capsys.readouterr()
+
+        monkeypatch.setattr(fsio, "file_lock", self._tiny_timeout(fsio.file_lock))
+
+        try:
+            exit_code = main([*argv_suffix, "-o", str(out_dir)])
+        finally:
+            lock_path.unlink(missing_ok=True)
+
+        assert exit_code != 0
+        err = capsys.readouterr().err
+        assert "Could not acquire lock" in err
+        # Nothing was approved/rejected/published before the lock timed out.
+        queue = _queue(out_dir)
+        assert queue.get("1").status is ReviewStatus.PENDING
+        assert queue.get("2").status is ReviewStatus.PENDING

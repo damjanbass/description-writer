@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="sr-Latn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Korpus — ispravni opisi proizvoda na srpskom</title>
+<meta name="description" content="Korpus je mašina za gramatičku tačnost i usklađenost kataloga proizvoda na srpskom jeziku — proverava svaki padež, rod i broj, i izvodi ćirilicu i latinicu iz jedne generacije, bez izmišljanja.">
+<link rel="canonical" href="https://korpus.rs/">
+<meta property="og:title" content="Korpus — ispravni opisi proizvoda na srpskom">
+<meta property="og:description" content="Mašina za gramatičku tačnost i usklađenost. Oba pisma, iz jedne generacije. Bez izmišljanja.">
+<meta property="og:image" content="og.png">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="sr_RS">
+<meta property="og:url" content="https://korpus.rs/">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="korpus.css">
+</head>
+<body>
+<div id="top">
+
+  <!-- ========= HEADER ========= -->
+  <header class="site-header" data-header>
+    <a href="#top" class="brand" data-nav>
+      <span class="brand-mark" data-fixed>К</span>
+      <span class="brand-name" data-fixed>Korpus</span>
+    </a>
+    <nav class="main-nav" data-mainnav aria-label="Glavna navigacija">
+      <a href="#problem" data-nav>Problem</a>
+      <a href="#tacnost" data-nav>Tačnost</a>
+      <a href="#uskladjenost" data-nav>Usklađenost</a>
+      <a href="#integracije" data-nav>Integracije</a>
+      <a href="#cene" data-nav>Cene</a>
+    </nav>
+    <div class="header-actions">
+      <div class="script-toggle" data-script-toggle role="group" aria-label="Izbor pisma">
+        <button type="button" data-script="lat" data-fixed class="script-btn is-active">Лат</button>
+        <button type="button" data-script="cyr" data-fixed class="script-btn">Ћир</button>
+      </div>
+      <a href="#kontakt" class="btn-primary btn-cta" data-nav>Zakaži pilot</a>
+    </div>
+  </header>
+
+  <main>
+    <!-- ========= HERO ========= -->
+    <section class="hero bg-dark">
+      <div class="hero-aurora" aria-hidden="true">
+        <div class="blob-a"></div>
+        <div class="blob-b"></div>
+        <div class="grid"></div>
+      </div>
+
+      <div class="hero-inner container">
+        <div class="hero-grid">
+          <div>
+            <div class="hero-kicker">
+              <span class="dot" aria-hidden="true"></span>
+              ZA KATALOGE OD 30.000 DO 800.000 <span data-fixed>SKU</span>
+            </div>
+            <h1>Ispravni opisi proizvoda na srpskom. <span class="accent">Oba pisma.</span> Bez izmišljanja.</h1>
+            <p class="hero-sub">Nismo još jedan generator teksta. <span data-fixed>Korpus</span> je mašina za gramatičku tačnost i usklađenost — proverava svaki padež, rod i broj, i izvodi ćirilicu i latinicu iz <em>jedne</em> generacije, za ceo katalog.</p>
+            <div class="hero-ctas">
+              <a href="#kontakt" data-nav class="btn-primary">Zakaži pilot →</a>
+              <a href="#tacnost" data-nav class="btn-ghost">Pogledaj kako radi</a>
+            </div>
+          </div>
+          <div class="demo-card-wrap">
+            <div class="demo-badge" data-fixed>✓ provereno · oba pisma</div>
+            <div class="demo-card">
+              <div class="demo-card-top">
+                <div class="demo-swatch" aria-hidden="true">product<br>shot</div>
+                <div style="flex:1;min-width:0">
+                  <div class="demo-title">Crna kožna patika <span data-fixed>Nike</span>, veličina 42</div>
+                  <div class="demo-tags">
+                    <span>boja: crna</span>
+                    <span>materijal: koža</span>
+                    <span data-fixed>brend: Nike</span>
+                  </div>
+                </div>
+              </div>
+              <div class="demo-rule"></div>
+              <p class="demo-copy">Elegantna crna patika izrađena od prave kože. Model <span data-fixed style="font-weight:600">Nike Air</span> dolazi u veličini 42 i pruža udoban hod tokom celog dana.</p>
+              <div class="demo-foot"><span data-fixed>›</span> svaka rečenica vezana za atribut iznad</div>
+            </div>
+            <div class="demo-tip" data-fixed>prebaci Лат / Ћир gore ↗</div>
+          </div>
+        </div>
+
+        <div class="stat-band" data-reveal>
+          <div>
+            <div class="stat-num"><span data-count="0" data-suffix="%">0%</span></div>
+            <div class="stat-label on-accent2" data-fixed>greška na brendovima</div>
+          </div>
+          <div>
+            <div class="stat-num"><span data-count="7">7</span></div>
+            <div class="stat-label">padeža proverena</div>
+          </div>
+          <div>
+            <div class="stat-num"><span data-fixed>2</span> pisma</div>
+            <div class="stat-label">iz 1 generacije</div>
+          </div>
+          <div>
+            <div class="stat-num">&lt;<span data-count="3" data-suffix="%">3%</span></div>
+            <div class="stat-label">greška u slaganju</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========= PROBLEM ========= -->
+    <section id="problem" class="section bg">
+      <div class="container">
+        <div class="intro" data-reveal>
+          <div class="eyebrow">// PROBLEM, NJIHOVIM REČIMA</div>
+          <h2 class="h2">Tri rečenice koje čujemo na svakom sastanku.</h2>
+        </div>
+        <div class="problem-grid">
+          <div class="quote-card tilt" data-reveal>
+            <div class="quote-num" data-fixed>01</div>
+            <p class="quote-text">„Pola kataloga nema opis — ili ima isti kopiran tekst."</p>
+            <div class="quote-attrib">— direktor e-commerce, elektronika</div>
+          </div>
+          <div class="quote-card tilt" data-reveal>
+            <div class="quote-num" data-fixed>02</div>
+            <p class="quote-text">„Ne stižemo da pišemo, a roba nam se vraća."</p>
+            <div class="quote-attrib">— menadžer kataloga, moda</div>
+          </div>
+          <div class="quote-card tilt" data-reveal>
+            <div class="quote-num" data-fixed>03</div>
+            <p class="quote-text">„Treba i ćirilica i latinica — a nema ko to da radi."</p>
+            <div class="quote-attrib">— rukovodilac prodaje, retail</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========= WEDGE ========= -->
+    <section class="section bg-dark">
+      <div class="container">
+        <div class="intro-wide" data-reveal>
+          <div class="eyebrow on-dark">// ZAŠTO NAS GLOBALNI ALATI NE MOGU KOPIRATI</div>
+          <h2 class="h2" style="margin-bottom:18px">Tri sloja odbrane.</h2>
+          <p class="lead on-dark">„AI piše opise" je besplatna funkcija. Vrednost je u slojevima ispod — i poređani su po tome koliko ih je teško kopirati.</p>
+        </div>
+        <div class="wedge-grid">
+          <div class="layer-card" data-reveal>
+            <div class="layer-top"><span class="layer-tag" data-fixed>SLOJ 1</span><span class="layer-note" data-fixed>tehnički moat</span></div>
+            <h3>Tačnost</h3>
+            <p>7 padeža. Slaganje roda i broja. Digrafi nj, lj, dž. Sve se proverava <strong>deterministički, posle</strong> generacije — ne nadamo se da je model pogodio.</p>
+          </div>
+          <div class="layer-card" data-reveal>
+            <div class="layer-top"><span class="layer-tag" data-fixed>SLOJ 2</span><span class="layer-note" data-fixed>moat poverenja</span></div>
+            <h3>Usklađenost</h3>
+            <p>Generacija je vezana <strong>samo za unete atribute</strong>. Nema izmišljenih specifikacija. Svaka tvrdnja vodi do izvora — u skladu sa Zakonom 88/2021.</p>
+          </div>
+          <div class="layer-card is-featured" data-reveal>
+            <div class="layer-top"><span class="layer-tag" data-fixed>SLOJ 3</span><span class="layer-note is-pill" data-fixed>najjači</span></div>
+            <h3>Distribucija</h3>
+            <p>Konektori za domaće platforme — <strong data-fixed>Selltico, TAU Commerce</strong> — koje globalni alati nemaju razloga da grade. Lock-in koji nas drži u nalogu.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========= TAČNOST (interactive) ========= -->
+    <section id="tacnost" class="section bg">
+      <div class="container">
+        <div class="intro" style="max-width:700px" data-reveal>
+          <div class="eyebrow">// SLOJ 1 · PROBAJTE</div>
+          <h2 class="h2" style="margin-bottom:16px">Tačnost koju možete da kliknete.</h2>
+          <p class="lead">Tri pravila koja LLM stalno lomi — a mi proveravamo posle svake generacije. Promenite ulaz i gledajte kako se izlaz slaže.</p>
+        </div>
+        <div class="tacnost-grid">
+          <!-- Agreement demo -->
+          <div class="agree-panel" data-reveal>
+            <div class="panel-tag">SLAGANJE RODA</div>
+            <p class="panel-copy">Pridev menja oblik prema rodu imenice. Izaberite proizvod:</p>
+            <div class="agree-btns" data-agree-btns>
+              <button type="button" class="chip-btn is-active" data-noun="majica" data-art="crna" data-fixed>majica</button>
+              <button type="button" class="chip-btn" data-noun="kaiš" data-art="crni" data-fixed>kaiš</button>
+              <button type="button" class="chip-btn" data-noun="haljina" data-art="crna" data-fixed>haljina</button>
+              <button type="button" class="chip-btn" data-noun="patika" data-art="crna" data-fixed>patika</button>
+            </div>
+            <div class="agree-result"><span class="art" data-agree-art>crna</span> <span data-agree-noun>majica</span></div>
+            <div class="agree-hint" data-fixed>✓ rod usklađen automatski</div>
+          </div>
+          <!-- Number demo -->
+          <div class="number-panel" data-reveal>
+            <div class="panel-tag">OBLIK BROJA · 1 / 2–4 / 5+</div>
+            <p class="panel-copy">Imenica menja oblik uz broj. Povucite:</p>
+            <div class="number-result"><span class="val" data-num-val>1</span> <span data-num-word>proizvod</span></div>
+            <input data-num-slider type="range" min="1" max="12" value="1" class="number-range" aria-label="Broj proizvoda">
+            <div class="number-scale" data-fixed><span>1</span><span>12</span></div>
+          </div>
+          <!-- Transliteration mini -->
+          <div class="mini-panel" data-reveal>
+            <div class="panel-tag">ZAŠTIĆENI TERMIN</div>
+            <div class="mini-lines">
+              <div>Kupi <span class="term" data-fixed>iPhone 15</span> danas</div>
+              <div class="arrow" data-fixed>↓</div>
+              <div>Купи <span class="term" data-fixed>iPhone 15</span> данас</div>
+            </div>
+            <div class="mini-foot" data-fixed>✓ brend ostaje latinica · 0% greške</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========= USKLAĐENOST / PROVENANCE ========= -->
+    <section id="uskladjenost" class="section bg-dark">
+      <div class="container">
+        <div class="uskladjenost-head" data-reveal>
+          <div class="intro">
+            <div class="eyebrow on-dark">// SLOJ 2 · POREKLO SVAKE TVRDNJE</div>
+            <h2 class="h2" style="margin-bottom:16px">Ništa se ne objavljuje bez izvora.</h2>
+            <p class="lead on-dark">Pređite mišem preko rečenice — vidite tačno koji atribut je podržava. Tvrdnja bez izvora se <strong style="color:var(--warn);font-weight:600">označava</strong>, ne objavljuje.</p>
+          </div>
+          <div class="law-badge" data-fixed>Zakon o zaštiti potrošača · 88/2021</div>
+        </div>
+        <div class="uskladjenost-grid">
+          <div class="claim-block">
+            <div class="claim-block-label" data-fixed>GENERISANI OPIS</div>
+            <p>
+              <span class="claim" data-claim="c1">Crna majica od 100% pamuka.</span>
+              <span class="claim" data-claim="c2">Dostupna u veličini L.</span>
+              <span class="claim is-bad" data-claim="bad">Otporna na vodu do 50 m.</span>
+            </p>
+          </div>
+          <div class="attr-list">
+            <div class="attr-row" data-attr="c1">
+              <span class="attr-tag" data-fixed>ATRIBUT</span><span class="attr-val">boja=crna · materijal=pamuk</span>
+            </div>
+            <div class="attr-row" data-attr="c2">
+              <span class="attr-tag" data-fixed>ATRIBUT</span><span class="attr-val" data-fixed>veličina=L</span>
+            </div>
+            <div class="attr-row is-warn" data-attr="bad">
+              <span class="attr-tag" data-fixed>⚠ NEMA IZVORA</span><span class="attr-val" data-fixed>označeno · nije objavljeno</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========= INTEGRACIJE ========= -->
+    <section id="integracije" class="section bg">
+      <div class="container">
+        <div class="intro" data-reveal>
+          <div class="eyebrow">// SLOJ 3 · KONEKTORI</div>
+          <h2 class="h2">Spajamo se i na ono što globalni alati ignorišu.</h2>
+        </div>
+        <div class="integracije-grid">
+          <div class="integration-card tilt" data-reveal>
+            <div class="integration-top"><span class="integration-name" data-fixed>WooCommerce</span><span class="integration-dot is-live" aria-hidden="true"></span></div>
+            <div class="integration-status is-live" data-fixed>AKTIVNO · REST API</div>
+          </div>
+          <div class="integration-card tilt" data-reveal>
+            <div class="integration-top"><span class="integration-name" data-fixed>Magento</span><span class="integration-dot is-soon" aria-hidden="true"></span></div>
+            <div class="integration-status is-soon">USKORO</div>
+          </div>
+          <div class="integration-card tilt" data-reveal>
+            <div class="integration-top"><span class="integration-name" data-fixed>Selltico</span><span class="integration-dot" aria-hidden="true"></span></div>
+            <div class="integration-status">PLANIRANO · DOMAĆE</div>
+          </div>
+          <div class="integration-card tilt" data-reveal>
+            <div class="integration-top"><span class="integration-name" data-fixed>TAU Commerce</span><span class="integration-dot" aria-hidden="true"></span></div>
+            <div class="integration-status">PLANIRANO · DOMAĆE</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========= KAKO RADI ========= -->
+    <section class="section bg-dark2">
+      <div class="container">
+        <div data-reveal style="margin-bottom:clamp(40px,5vw,56px)">
+          <div class="eyebrow on-dark">// JEDAN TOK, OD CSV-a DO OBJAVE</div>
+          <h2 class="h2">Kako radi.</h2>
+        </div>
+        <div class="pipeline" data-pipeline data-reveal>
+          <div class="pipeline-step">
+            <div class="pipeline-num" data-fixed>01</div>
+            <h3>Uvoz</h3>
+            <p><span data-fixed>CSV / XLSX</span> sa atributima</p>
+          </div>
+          <div class="pipeline-step">
+            <div class="pipeline-num" data-fixed>02</div>
+            <h3>Generacija</h3>
+            <p>vezana samo za atribute</p>
+          </div>
+          <div class="pipeline-step">
+            <div class="pipeline-num" data-fixed>03</div>
+            <h3>Korekcija</h3>
+            <p>gramatika + transliteracija</p>
+          </div>
+          <div class="pipeline-step">
+            <div class="pipeline-num" data-fixed>04</div>
+            <h3>Provenance</h3>
+            <p>izveštaj o izvorima</p>
+          </div>
+          <div class="pipeline-step is-final">
+            <div class="pipeline-num" data-fixed>05</div>
+            <h3>Potvrda</h3>
+            <p>čovek odobrava → objava</p>
+          </div>
+        </div>
+        <div class="pipeline-foot" data-fixed>→ ništa se ne objavljuje automatski. Ćirilica i latinica izlaze zajedno.</div>
+      </div>
+    </section>
+
+    <!-- ========= CENE ========= -->
+    <section id="cene" class="section bg">
+      <div class="container">
+        <div class="intro" data-reveal>
+          <div class="eyebrow">// CENE</div>
+          <h2 class="h2" style="margin-bottom:14px">Licenciramo stanje kataloga — ne naplaćujemo po proizvodu.</h2>
+          <p class="lead">Bez metra, bez kredita po pozivu. Cena prati veličinu kataloga.</p>
+        </div>
+        <div class="cene-grid">
+          <div class="price-card is-dark tilt" data-reveal>
+            <div class="price-tag" data-fixed>PILOT / DOKAZ</div>
+            <div class="price-amount"><span data-fixed>€2.5k–5k</span></div>
+            <div class="price-period">jednokratno</div>
+            <p>5–20k <span data-fixed>SKU</span> + 1 konektor + <span data-fixed>QA</span> izveštaj tačnosti.</p>
+          </div>
+          <div class="price-card tilt" data-reveal>
+            <div class="price-tag" data-fixed>LICENCA ≤50k</div>
+            <div class="price-amount"><span data-fixed>~€12k</span></div>
+            <div class="price-period">godišnje</div>
+            <p>Dva pisma, provera tačnosti, provenance, 1 konektor. Regeneracija uključena.</p>
+          </div>
+          <div class="price-card is-featured tilt" data-reveal>
+            <div class="price-badge" data-fixed>NAJTRAŽENIJE</div>
+            <div class="price-tag" data-fixed>LICENCA ≤200k</div>
+            <div class="price-amount"><span data-fixed>~€24k</span></div>
+            <div class="price-period">godišnje</div>
+            <p>Isto, za veći katalog. Idealno za elektroniku i modu sa velikim brojem artikala.</p>
+          </div>
+          <div class="price-card tilt" data-reveal>
+            <div class="price-tag" data-fixed>ENTERPRISE 200k+</div>
+            <div class="price-amount"><span data-fixed>€48k+</span></div>
+            <div class="price-period">godišnje</div>
+            <p>Najveći katalozi. Migracija i prilagođeni konektor: <span data-fixed>€3k–10k</span> jednokratno.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========= CTA / LEAD FORM ========= -->
+    <section id="kontakt" class="section-cta cta-section bg-dark">
+      <div class="cta-aurora" aria-hidden="true"><div class="blob"></div></div>
+      <div class="cta-inner">
+        <h2 data-reveal>Spremni da očistite katalog?</h2>
+        <p class="lead" data-reveal>Počnite plaćenim pilotom na 5–20k artikala. Dobićete tačan, dvopismeni katalog i izveštaj o tačnosti — pre svake šire obaveze.</p>
+
+        <div data-reveal>
+          <form id="lead-form" class="lead-form" novalidate>
+            <div class="form-row">
+              <div class="field">
+                <label for="lf-ime">Ime i prezime</label>
+                <input type="text" id="lf-ime" name="ime" autocomplete="name" required>
+              </div>
+              <div class="field">
+                <label for="lf-email">Email</label>
+                <input type="email" id="lf-email" name="email" autocomplete="email" required>
+              </div>
+            </div>
+            <div class="field">
+              <label for="lf-firma">Firma</label>
+              <input type="text" id="lf-firma" name="firma" autocomplete="organization" required>
+            </div>
+            <div class="field">
+              <label for="lf-poruka">Poruka</label>
+              <textarea id="lf-poruka" name="poruka" rows="4" placeholder="Recite nam nešto o katalogu — veličina, platforma, rok."></textarea>
+            </div>
+            <div class="field visually-hidden" aria-hidden="true">
+              <label for="lf-website">Website</label>
+              <input type="text" id="lf-website" name="website" tabindex="-1" autocomplete="off">
+            </div>
+            <div class="form-submit-row">
+              <button type="submit" class="btn-primary">Zakaži pilot →</button>
+              <span class="form-status" data-form-status role="status" aria-live="polite"></span>
+            </div>
+          </form>
+          <div class="form-success" data-form-success hidden>
+            <h3>Hvala!</h3>
+            <p>Javićemo se u roku od 24h.</p>
+          </div>
+          <p class="mailto-fallback">ili nam pišite direktno: <a href="mailto:pilot@korpus.rs" data-fixed>pilot@korpus.rs</a></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ========= FOOTER ========= -->
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <span class="footer-mark" data-fixed>К</span>
+        <span class="footer-name" data-fixed>Korpus</span>
+        <span class="footer-tagline">katalog correctness engine</span>
+      </div>
+      <div class="footer-meta" data-fixed>Srbija · proširivo na HR / BS / ME / MK</div>
+      <div class="footer-meta" data-fixed>© 2026 Korpus</div>
+    </div>
+  </footer>
+
+</div>
+<script src="korpus.js"></script>
+</body>
+</html>

@@ -14,6 +14,9 @@
   publish -o <out_dir> --connector {woocommerce,selltico,tau_commerce}
           [--base-url URL] [--consumer-key KEY] [--consumer-secret SECRET]
           [--publish-script cirilica|latinica] [--fake-connector]
+      `--consumer-key`/`--consumer-secret` may be omitted and supplied via the
+      KORPUS_CONSUMER_KEY/KORPUS_CONSUMER_SECRET env vars instead (preferred -
+      argv-passed secrets are visible in process listings and shell history).
       Push every APPROVED item to the chosen connector, then mark it
       PUBLISHED. PENDING/REJECTED items are skipped. `selltico` and
       `tau_commerce` are named, selectable connectors today (per
@@ -33,6 +36,7 @@ connectors are only ever constructed in the non-fake branches, so `--fake`
 
 from __future__ import annotations
 
+import os
 import sys
 from argparse import ArgumentParser, Namespace
 from collections.abc import Callable
@@ -42,6 +46,7 @@ from connectors.base import Connector
 from connectors.selltico import SellticoConnector
 from connectors.tau_commerce import TauCommerceConnector
 from connectors.woocommerce import WooCommerceConnector
+from pipeline import fsio
 from pipeline.generation import AnthropicProvider, FakeProvider, Provider
 from pipeline.ingest import read_products
 from pipeline.review import (
@@ -53,6 +58,12 @@ from pipeline.review import (
 )
 from pipeline.runner import BatchProcessingError, run_batch, write_outputs
 from pipeline.types import DualScript, ProductRecord, Script
+
+# Env vars `publish` falls back to when --consumer-key/--consumer-secret are
+# omitted, so a credential never has to be typed on the command line (visible
+# in `ps`/Task Manager and persisted to shell history) for routine use.
+_ENV_CONSUMER_KEY = "KORPUS_CONSUMER_KEY"
+_ENV_CONSUMER_SECRET = "KORPUS_CONSUMER_SECRET"
 
 # Canned offline response for --fake. Carries no numbers and no attribute
 # echoes on purpose, so a demo run never spuriously flags claims/provenance
@@ -78,8 +89,9 @@ def _load_queue(out_dir: str) -> ReviewQueue:
 
 
 def _save_queue(queue: ReviewQueue, out_dir: str) -> None:
-    Path(out_dir).mkdir(parents=True, exist_ok=True)
-    _queue_path(out_dir).write_text(review_queue_to_json(queue), encoding="utf-8")
+    path = _queue_path(out_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fsio.atomic_write_text(path, review_queue_to_json(queue))
 
 
 class _FakeConnector:
@@ -115,15 +127,42 @@ _CONNECTOR_FACTORIES: dict[str, Callable[[Namespace], Connector]] = {
 }
 
 
+def _resolve_credential(cli_value: str | None, env_var: str, flag: str) -> str | None:
+    """Resolve one publish credential: explicit `flag` value wins, else `env_var`.
+
+    Warns to stderr (never echoing the value itself) when the credential came
+    from the command line, since argv is visible to other users on the same
+    machine via process listings and is typically persisted to shell history -
+    the env var does not have either exposure.
+    """
+    if cli_value is not None:
+        print(
+            f"warning: {flag} was passed on the command line; its value can be seen by "
+            f"other users via process listings and may be saved in shell history. "
+            f"Prefer setting the {env_var} environment variable instead.",
+            file=sys.stderr,
+        )
+        return cli_value
+    return os.environ.get(env_var)
+
+
 def _build_connector(args: Namespace) -> Connector:
     if args.fake_connector:
         return _FakeConnector()
+    args.consumer_key = _resolve_credential(args.consumer_key, _ENV_CONSUMER_KEY, "--consumer-key")
+    args.consumer_secret = _resolve_credential(
+        args.consumer_secret, _ENV_CONSUMER_SECRET, "--consumer-secret"
+    )
     if not args.base_url or not args.consumer_key:
         raise ValueError(
-            "--base-url and --consumer-key are required unless --fake-connector is set"
+            f"--base-url and --consumer-key (or {_ENV_CONSUMER_KEY}) are required "
+            "unless --fake-connector is set"
         )
     if args.connector == "woocommerce" and not args.consumer_secret:
-        raise ValueError("--consumer-secret is required for --connector woocommerce")
+        raise ValueError(
+            f"--consumer-secret (or {_ENV_CONSUMER_SECRET}) is required for "
+            "--connector woocommerce"
+        )
     return _CONNECTOR_FACTORIES[args.connector](args)
 
 
@@ -190,69 +229,99 @@ def _cmd_review_list(args: Namespace) -> int:
 
 
 def _cmd_review_approve(args: Namespace) -> int:
+    queue_path = _queue_path(args.out)
+    queue_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        queue = _load_queue(args.out)
-    except OSError as exc:
+        with fsio.file_lock(queue_path):
+            try:
+                queue = _load_queue(args.out)
+            except OSError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 1
+            try:
+                queue = queue.approve(args.product_id)
+            except ValueError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 1
+            _save_queue(queue, args.out)
+    except TimeoutError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    try:
-        queue = queue.approve(args.product_id)
-    except ValueError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    _save_queue(queue, args.out)
     print(f"Approved {args.product_id}.")
     return 0
 
 
 def _cmd_review_reject(args: Namespace) -> int:
+    queue_path = _queue_path(args.out)
+    queue_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        queue = _load_queue(args.out)
-    except OSError as exc:
+        with fsio.file_lock(queue_path):
+            try:
+                queue = _load_queue(args.out)
+            except OSError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 1
+            try:
+                queue = queue.reject(args.product_id, reason=args.reason)
+            except ValueError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 1
+            _save_queue(queue, args.out)
+    except TimeoutError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    try:
-        queue = queue.reject(args.product_id, reason=args.reason)
-    except ValueError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    _save_queue(queue, args.out)
     print(f"Rejected {args.product_id}.")
     return 0
 
 
 def _cmd_publish(args: Namespace) -> int:
-    try:
-        queue = _load_queue(args.out)
-    except OSError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-
-    try:
-        connector = _build_connector(args)
-    except ValueError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-
-    publish_script = Script.CIRILICA if args.publish_script == "cirilica" else Script.LATINICA
-
-    approved_items = queue.by_status(ReviewStatus.APPROVED)
-    skipped = len(queue.items) - len(approved_items)
+    queue_path = _queue_path(args.out)
+    queue_path.parent.mkdir(parents=True, exist_ok=True)
     published = 0
     failed = 0
-    for item in approved_items:
-        try:
-            connector.push_description(
-                item.product_id, item.dual_script, publish_script=publish_script
-            )
-        except Exception as exc:  # noqa: BLE001 - one bad product must not abort the run
-            failed += 1
-            print(f"warning: product {item.product_id} failed to publish: {exc}", file=sys.stderr)
-            continue
-        queue = queue.mark_published(item.product_id)
-        published += 1
+    skipped = 0
+    try:
+        with fsio.file_lock(queue_path):
+            try:
+                queue = _load_queue(args.out)
+            except OSError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 1
 
-    _save_queue(queue, args.out)
+            try:
+                connector = _build_connector(args)
+            except ValueError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 1
+
+            publish_script = (
+                Script.CIRILICA if args.publish_script == "cirilica" else Script.LATINICA
+            )
+
+            approved_items = queue.by_status(ReviewStatus.APPROVED)
+            skipped = len(queue.items) - len(approved_items)
+            for item in approved_items:
+                try:
+                    connector.push_description(
+                        item.product_id, item.dual_script, publish_script=publish_script
+                    )
+                except Exception as exc:  # noqa: BLE001 - one bad product must not abort the run
+                    failed += 1
+                    print(
+                        f"warning: product {item.product_id} failed to publish: {exc}",
+                        file=sys.stderr,
+                    )
+                    continue
+                # Save immediately after each successful push, not just once at
+                # the end of the loop: a crash partway through the batch must
+                # never lose the fact that earlier items were already published.
+                queue = queue.mark_published(item.product_id)
+                published += 1
+                _save_queue(queue, args.out)
+    except TimeoutError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
     print(f"Published {published} product(s); {failed} failed; {skipped} not approved (skipped).")
     return 0
 
@@ -324,9 +393,23 @@ def main(argv: list[str] | None = None) -> int:
         help="Which connector to publish through.",
     )
     publish.add_argument("--base-url", default=None, help="Store base URL.")
-    publish.add_argument("--consumer-key", default=None, help="API key/consumer key.")
     publish.add_argument(
-        "--consumer-secret", default=None, help="Consumer secret (required for woocommerce)."
+        "--consumer-key",
+        default=None,
+        help=(
+            "API key/consumer key. Falls back to the KORPUS_CONSUMER_KEY env var "
+            "if omitted; prefer the env var, since a value passed here is visible "
+            "in process listings and shell history."
+        ),
+    )
+    publish.add_argument(
+        "--consumer-secret",
+        default=None,
+        help=(
+            "Consumer secret (required for woocommerce). Falls back to the "
+            "KORPUS_CONSUMER_SECRET env var if omitted; prefer the env var, since "
+            "a value passed here is visible in process listings and shell history."
+        ),
     )
     publish.add_argument(
         "--publish-script",
