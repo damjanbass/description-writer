@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% load static %}
+{% load batches_extras %}
+
+{% block title %}Serije — {{ org.name }} — Korpus{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'css/batches.css' %}">
+{% endblock %}
+
+{% block org_name %}<span class="muted">{{ org.name }}</span>{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="{% url 'home' %}">Organizacije</a><span class="breadcrumb-sep">/</span>{{ org.name }}
+</div>
+
+<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:24px">
+  <h1 class="page-title">Serije</h1>
+  {% if batches %}
+  <a href="{% url 'batches:upload' org_slug=org.slug %}" class="btn btn-primary">Nova serija</a>
+  {% endif %}
+</div>
+
+{% if batches %}
+<div class="card" style="padding:0;overflow:hidden">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Naziv</th>
+        <th>Status</th>
+        <th class="num">Stavki</th>
+        <th class="num">Za pregled</th>
+        <th>Kreirana</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for batch in batches %}
+      <tr>
+        <td><a href="{% url 'batches:detail' org_slug=org.slug pk=batch.pk %}">{{ batch.name }}</a></td>
+        <td><span class="badge {{ batch.status|batch_status_class }}">{{ batch.status|batch_status_label }}</span></td>
+        <td class="num mono">{{ batch.total_count }}</td>
+        <td class="num mono">{% if batch.needs_review_count %}<span class="flag-dot"></span>{% endif %}{{ batch.needs_review_count }}</td>
+        <td class="muted">{{ batch.created_at|date:"d.m.Y H:i" }}</td>
+        <td><a href="{% url 'batches:detail' org_slug=org.slug pk=batch.pk %}" class="btn btn-ghost">Otvori →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if is_paginated %}
+<div style="display:flex;gap:8px;justify-content:center;margin-top:20px">
+  {% if page_obj.has_previous %}<a class="btn btn-ghost" href="?page={{ page_obj.previous_page_number }}">← Prethodna</a>{% endif %}
+  <span class="muted" style="align-self:center">Strana {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+  {% if page_obj.has_next %}<a class="btn btn-ghost" href="?page={{ page_obj.next_page_number }}">Sledeća →</a>{% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="card empty-state">
+  <p>Još nema serija. Otpremite CSV ili XLSX da počnete.</p>
+  <a href="{% url 'batches:upload' org_slug=org.slug %}" class="btn btn-primary">Otpremi katalog</a>
+</div>
+{% endif %}
+{% endblock %}

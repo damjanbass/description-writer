@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Objavi — {{ batch.name }} — Korpus{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'css/batches.css' %}">
+{% endblock %}
+
+{% block org_name %}<span class="muted">{{ org.name }}</span>{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="{% url 'batches:list' org_slug=org.slug %}">Serije</a><span class="breadcrumb-sep">/</span><a href="{% url 'batches:detail' org_slug=org.slug pk=batch.pk %}">{{ batch.name }}</a><span class="breadcrumb-sep">/</span>Objavi
+</div>
+
+<h1 class="page-title" style="margin-bottom:8px">Objavi odobrene opise</h1>
+<p class="muted" style="margin-bottom:24px">
+  <span class="mono">{{ approved_count }}</span> odobrenih stavki iz serije
+  „{{ batch.name }}" biće objavljeno u izabranu prodavnicu.
+</p>
+
+{% if approved_count == 0 %}
+<div class="card empty-state">
+  <p>Nema odobrenih stavki. Odobrite bar jednu stavku pre objavljivanja.</p>
+  <a href="{% url 'batches:detail' org_slug=org.slug pk=batch.pk %}" class="btn btn-primary">Nazad na seriju</a>
+</div>
+{% else %}
+<div class="warning-card">
+  Konektori za Selltico i TAU Commerce su u pripremi — objavljivanje preko njih
+  trenutno prijavljuje grešku i ne menja stavke. Za objavu koristite WooCommerce.
+</div>
+
+<div class="card form-card">
+  <form method="post">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+    <div class="error-card">{{ form.non_field_errors }}</div>
+    {% endif %}
+    {% for field in form %}
+    <div class="field">
+      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {{ field }}
+      {% if field.errors %}<div class="error-card" style="margin:8px 0 0">{{ field.errors }}</div>{% endif %}
+    </div>
+    {% endfor %}
+    <div style="margin-top:24px;display:flex;gap:12px">
+      <button type="submit" class="btn btn-primary">Objavi {{ approved_count }} stavki</button>
+      <a href="{% url 'batches:detail' org_slug=org.slug pk=batch.pk %}" class="btn btn-ghost">Otkaži</a>
+    </div>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

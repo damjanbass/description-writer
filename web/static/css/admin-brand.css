@@ -1,0 +1,98 @@
+/* Korpus admin — light brand pass over stock Django admin.
+   Structural admin CSS stays stock; this only recolors it to the Korpus
+   tokens (see korpus-ui.css :root) and adds the header brand mark. */
+
+:root {
+  --korpus-ink: #0A0E16;
+  --korpus-accent: #2F6BFF;
+  --korpus-bg2: #EDF0F4;
+  --korpus-line: #E3E7ED;
+  --korpus-panel: #F6F7F9;
+}
+
+#header {
+  background: var(--korpus-ink);
+  color: #fff;
+}
+
+#header a:link, #header a:visited {
+  color: #fff;
+}
+
+#user-tools a {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.korpus-admin-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: #fff;
+}
+
+.korpus-admin-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--korpus-ink);
+  font-family: 'Unbounded', 'Manrope', sans-serif;
+  font-weight: 800;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.korpus-admin-brand-name {
+  font-family: 'Unbounded', 'Manrope', sans-serif;
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+
+div.breadcrumbs {
+  background: var(--korpus-bg2);
+  color: var(--korpus-ink);
+  border-bottom: 1px solid var(--korpus-line);
+}
+
+div.breadcrumbs a {
+  color: var(--korpus-ink);
+}
+
+a:link, a:visited {
+  color: var(--korpus-accent);
+}
+
+/* Module/fieldset captions read calmer as a quiet panel than a solid
+   accent block. */
+.module h2, .module caption, .inline-group h2 {
+  background: var(--korpus-panel);
+  color: var(--korpus-ink);
+  border: 1px solid var(--korpus-line);
+}
+
+.button, input[type="submit"], input[type="button"], .submit-row input, a.button {
+  background: var(--korpus-accent);
+}
+
+.button:active, input[type="submit"]:active, input[type="button"]:active,
+.button:focus, input[type="submit"]:focus, input[type="button"]:focus,
+.button:hover, input[type="submit"]:hover, input[type="button"]:hover {
+  background: var(--korpus-ink);
+}
+
+#changelist-filter a.selected, #changelist-filter li.selected a {
+  color: var(--korpus-accent);
+}
+
+#changelist table tbody tr.selected {
+  background: rgba(47, 107, 255, 0.08);
+}
+
+a:focus, a:active, *:focus-visible {
+  outline: 2px solid var(--korpus-accent);
+  outline-offset: 1px;
+}

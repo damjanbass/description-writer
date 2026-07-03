@@ -13,12 +13,20 @@ from .base import *  # noqa: F401,F403
 DEBUG = False
 
 # ---------------------------------------------------------------------------
-# Secret key — REQUIRED in prod, no insecure fallback.
+# Secret key — REQUIRED in prod, no insecure fallback and no weak keys.
 # ---------------------------------------------------------------------------
 SECRET_KEY = os.environ.get("KORPUS_SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError(
         "KORPUS_SECRET_KEY environment variable is required in production."
+    )
+# Fail loud on an obviously weak key (Django's own W009 threshold): at least
+# 50 characters and at least 5 distinct characters.
+if len(SECRET_KEY) < 50 or len(set(SECRET_KEY)) < 5:
+    raise RuntimeError(
+        "KORPUS_SECRET_KEY is too weak: use at least 50 characters with good "
+        'entropy. Generate one with: python -c '
+        '"import secrets; print(secrets.token_urlsafe(64))"'
     )
 
 # ---------------------------------------------------------------------------
@@ -27,6 +35,11 @@ if not SECRET_KEY:
 ALLOWED_HOSTS = [
     h.strip() for h in os.environ.get("KORPUS_ALLOWED_HOSTS", "").split(",") if h.strip()
 ]
+if not ALLOWED_HOSTS:
+    raise RuntimeError(
+        "KORPUS_ALLOWED_HOSTS environment variable is required in production "
+        "(comma-separated list of hostnames, e.g. 'korpus.rs,www.korpus.rs')."
+    )
 
 CSRF_TRUSTED_ORIGINS = [
     o.strip() for o in os.environ.get("KORPUS_CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()
@@ -62,6 +75,13 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 # would risk a redirect loop on the internal (plain HTTP) hop.
 SECURE_SSL_REDIRECT = False
 
+# `check --deploy` raises security.W008 because SECURE_SSL_REDIRECT is False.
+# That is intentional here: Caddy (the TLS-terminating reverse proxy) owns the
+# HTTP->HTTPS redirect at the edge, so Django must NOT also redirect on the
+# internal plain-HTTP hop. Silence only this one check so the rest of the
+# deploy audit stays a meaningful zero-warning gate.
+SILENCED_SYSTEM_CHECKS = ["security.W008"]
+
 # ---------------------------------------------------------------------------
 # Email — SMTP, configured via env (task 4D/5C to finalize provider/creds)
 # ---------------------------------------------------------------------------
@@ -72,3 +92,56 @@ EMAIL_HOST_USER = os.environ.get("KORPUS_EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("KORPUS_EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = os.environ.get("KORPUS_EMAIL_USE_TLS", "true").lower() == "true"
 DEFAULT_FROM_EMAIL = os.environ.get("KORPUS_DEFAULT_FROM_EMAIL", "no-reply@korpus.rs")
+
+# ---------------------------------------------------------------------------
+# Logging — structured lines to stdout (captured by the process manager).
+# ---------------------------------------------------------------------------
+# Deliberately NEVER logs request bodies: uploaded catalogs and connector
+# credentials must not leak into logs. Django does not log request bodies by
+# default, and we add nothing that would. django.security warnings (host
+# header, CSRF, etc.) are surfaced separately so they stand out.
+_APP_LOGGERS = ["accounts", "leads", "connections", "batches", "common"]
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "structured": {
+            "format": (
+                "%(asctime)s level=%(levelname)s logger=%(name)s "
+                "%(message)s"
+            ),
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",
+            "formatter": "structured",
+            "level": "INFO",
+        },
+    },
+    "root": {"handlers": ["console"], "level": "WARNING"},
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        # Security-relevant events get their own floor so they are never
+        # silently dropped below WARNING.
+        "django.security": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        **{
+            name: {
+                "handlers": ["console"],
+                "level": "INFO",
+                "propagate": False,
+            }
+            for name in _APP_LOGGERS
+        },
+    },
+}

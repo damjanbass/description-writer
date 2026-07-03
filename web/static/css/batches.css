@@ -1,0 +1,339 @@
+/* =========================================================
+   Korpus UI — batches app components
+   Extends korpus-ui.css's tokens (loaded first in every
+   batches/*.html template). Nothing here redefines a token
+   or a korpus-ui.css class — additive component styles only,
+   scoped to the batch list / upload / detail / review screens.
+   ========================================================= */
+
+/* ---------- breadcrumb ---------- */
+.breadcrumb {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-bottom: 12px;
+  letter-spacing: 0.01em;
+}
+
+.breadcrumb a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.breadcrumb a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.breadcrumb-sep {
+  margin: 0 6px;
+  opacity: 0.5;
+}
+
+/* ---------- counts strip (batch detail header) ---------- */
+.counts-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 20px 0;
+  background: var(--card);
+}
+
+.counts-strip-item {
+  flex: 1 1 120px;
+  padding: 14px 18px;
+  border-right: 1px solid var(--line);
+}
+
+.counts-strip-item:last-child { border-right: none; }
+
+.counts-strip-num {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.counts-strip-label {
+  font-size: 11.5px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 2px;
+}
+
+.counts-strip-item.is-needs-review .counts-strip-num { color: var(--warn); }
+
+/* ---------- filter pills ---------- */
+.filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.pill:hover { background: var(--bg2); color: var(--ink); }
+
+.pill.is-active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+
+/* ---------- needs-review flag ---------- */
+.flag-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--warn);
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.flag-tag {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #9a6a10;
+  background: rgba(242, 163, 60, 0.16);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+/* ---------- review item: two-panel dual-script view ---------- */
+.review-panels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 20px 0;
+}
+
+@media (max-width: 900px) {
+  .review-panels { grid-template-columns: 1fr; }
+}
+
+.review-panel {
+  background: var(--dark);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 24px;
+}
+
+.review-panel-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent2);
+  margin-bottom: 14px;
+}
+
+.review-panel-text {
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.92);
+  white-space: pre-wrap;
+}
+
+/* ---------- provenance ---------- */
+.provenance-section { margin: 28px 0; }
+
+.provenance-heading {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.provenance-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.provenance-entry {
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 14px;
+  line-height: 1.55;
+  border-left: 3px solid transparent;
+}
+
+.provenance-entry-supported {
+  background: rgba(19, 207, 192, 0.14);
+  border-left-color: var(--accent2);
+}
+
+.provenance-entry-unsupported {
+  background: rgba(242, 163, 60, 0.14);
+  border-left-color: var(--warn);
+}
+
+.provenance-entry-sentence { color: var(--ink); }
+
+.provenance-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #9a6a10;
+  margin-left: 10px;
+}
+
+.provenance-attrs {
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* ---------- attribute chips ---------- */
+.attr-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.attr-chip {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 5px 10px;
+  color: var(--ink);
+}
+
+.attr-chip-key { color: var(--muted); }
+
+/* ---------- inline error card (publish_error) ---------- */
+.error-card {
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  background: rgba(229, 72, 77, 0.08);
+  border-radius: 12px;
+  padding: 14px 18px;
+  font-size: 13.5px;
+  margin: 16px 0;
+}
+
+.error-card-heading {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+/* ---------- sticky bottom action bar ---------- */
+.action-bar-spacer { height: 88px; }
+
+.action-bar {
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-top: 1px solid var(--line);
+  padding: 16px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  z-index: 10;
+}
+
+.action-bar-status {
+  margin-right: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.reject-form {
+  display: none;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1 1 auto;
+}
+
+.reject-form.is-open { display: flex; }
+
+.reject-form textarea {
+  flex: 1 1 auto;
+  min-height: 44px;
+}
+
+/* ---------- prev/next item nav ---------- */
+.item-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 24px 0;
+}
+
+.item-nav a.is-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.kbd-hint {
+  font-family: var(--mono);
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+/* ---------- upload / publish form cards ---------- */
+.form-card {
+  max-width: 560px;
+}
+
+.warning-card {
+  border: 1px solid var(--warn);
+  background: rgba(242, 163, 60, 0.1);
+  border-radius: 12px;
+  padding: 14px 18px;
+  font-size: 13.5px;
+  color: #7a5210;
+  margin-bottom: 20px;
+}
+
+/* ---------- artifact download list ---------- */
+.artifact-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 20px 0;
+}

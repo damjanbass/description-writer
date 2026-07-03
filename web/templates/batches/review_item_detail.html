@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% load static %}
+{% load batches_extras %}
+
+{% block title %}{{ item.product_id }} — {{ batch.name }} — Korpus{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'css/batches.css' %}">
+{% endblock %}
+
+{% block org_name %}<span class="muted">{{ org.name }}</span>{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="{% url 'batches:list' org_slug=org.slug %}">Serije</a><span class="breadcrumb-sep">/</span><a href="{% url 'batches:detail' org_slug=org.slug pk=batch.pk %}{% if status_filter %}?status={{ status_filter }}{% endif %}">{{ batch.name }}</a><span class="breadcrumb-sep">/</span><span class="mono">{{ item.product_id }}</span>
+</div>
+
+<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+  <h1 class="page-title mono" style="font-size:clamp(20px,3vw,30px)">{{ item.product_id }}</h1>
+  {% if item.needs_review %}<span class="flag-tag">PREGLED PREPORUČEN</span>{% endif %}
+</div>
+
+{% if item.publish_error %}
+<div class="error-card">
+  <div class="error-card-heading">Greška pri objavi</div>
+  <div style="white-space:pre-wrap">{{ item.publish_error }}</div>
+</div>
+{% endif %}
+
+<div class="review-panels">
+  <section class="review-panel">
+    <div class="review-panel-label">Ћирилица</div>
+    <div class="review-panel-text">{{ item.cirilica }}</div>
+  </section>
+  <section class="review-panel">
+    <div class="review-panel-label">Latinica</div>
+    <div class="review-panel-text">{{ item.latinica }}</div>
+  </section>
+</div>
+
+<div class="provenance-section">
+  <div class="provenance-heading">Poreklo tvrdnji — svaka rečenica i njen izvor</div>
+  {% if provenance_entries %}
+  <div class="provenance-list">
+    {% for entry in provenance_entries %}
+    <div class="provenance-entry {% if entry.supported %}provenance-entry-supported{% else %}provenance-entry-unsupported{% endif %}">
+      <span class="provenance-entry-sentence">{{ entry.sentence }}</span>
+      {% if not entry.supported %}<span class="provenance-tag">⚠ NEMA IZVORA</span>{% endif %}
+      {% if entry.supporting_attributes %}
+      <div class="provenance-attrs">← {{ entry.supporting_attributes|join:" · " }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">Nema podataka o poreklu za ovu stavku.</p>
+  {% endif %}
+</div>
+
+{% if attributes %}
+<div class="provenance-section">
+  <div class="provenance-heading">Ulazni atributi — jedini izvor podataka</div>
+  <div class="attr-chips">
+    {% for key, value in attributes %}
+    <span class="attr-chip"><span class="attr-chip-key">{{ key }}=</span>{{ value }}</span>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="item-nav">
+  {% if prev_item_id %}
+  <a class="btn btn-ghost" href="{% url 'batches:item' org_slug=org.slug pk=batch.pk item_pk=prev_item_id %}{% if status_filter %}?status={{ status_filter }}{% endif %}">← Prethodna</a>
+  {% else %}<span></span>{% endif %}
+  {% if next_item_id %}
+  <a class="btn btn-ghost" href="{% url 'batches:item' org_slug=org.slug pk=batch.pk item_pk=next_item_id %}{% if status_filter %}?status={{ status_filter }}{% endif %}">Sledeća →</a>
+  {% endif %}
+</div>
+
+<div class="action-bar-spacer"></div>
+<div class="action-bar">
+  <div class="action-bar-status">
+    <span class="badge {{ item.status|item_status_class }}">{{ item.status|item_status_label }}</span>
+    {% if item.status == "published" %}
+    <span class="muted">Objavljeno {{ item.published_at|date:"d.m.Y H:i" }}</span>
+    {% elif item.decided_at %}
+    <span class="muted">{{ item.decided_by|default:"" }} · {{ item.decided_at|date:"d.m.Y H:i" }}</span>
+    {% endif %}
+    {% if item.status == "rejected" and item.reason %}
+    <span class="muted">— {{ item.reason }}</span>
+    {% endif %}
+  </div>
+
+  {% if item.status != "published" %}
+  <form method="post" class="reject-form" id="reject-form"
+        action="{% url 'batches:item-reject' org_slug=org.slug pk=batch.pk item_pk=item.pk %}">
+    {% csrf_token %}
+    <input type="hidden" name="status_filter" value="{{ status_filter|default:'' }}">
+    <textarea name="reason" class="textarea" required minlength="3"
+              placeholder="Razlog odbijanja (obavezno)"></textarea>
+    <button type="submit" class="btn btn-danger">Potvrdi odbijanje</button>
+    <button type="button" class="btn btn-ghost" id="reject-cancel">Otkaži</button>
+  </form>
+
+  <button type="button" class="btn btn-ghost" id="reject-open" style="color:var(--danger);border-color:var(--danger)">Odbij</button>
+
+  <form method="post" style="display:inline"
+        action="{% url 'batches:item-approve' org_slug=org.slug pk=batch.pk item_pk=item.pk %}">
+    {% csrf_token %}
+    <input type="hidden" name="status_filter" value="{{ status_filter|default:'' }}">
+    <button type="submit" class="btn btn-primary">Odobri</button>
+  </form>
+  {% endif %}
+</div>
+
+<script>
+(function () {
+  var openBtn = document.getElementById('reject-open');
+  var cancelBtn = document.getElementById('reject-cancel');
+  var form = document.getElementById('reject-form');
+  if (!openBtn || !form) return;
+  openBtn.addEventListener('click', function () {
+    form.classList.add('is-open');
+    openBtn.style.display = 'none';
+    form.querySelector('textarea').focus();
+  });
+  if (cancelBtn) cancelBtn.addEventListener('click', function () {
+    form.classList.remove('is-open');
+    openBtn.style.display = '';
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block title %}{{ title }} | Korpus admin{% endblock %}
+
+{% block branding %}
+<a href="{% url 'admin:index' %}" class="korpus-admin-brand">
+  <span class="korpus-admin-brand-mark">К</span>
+  <span class="korpus-admin-brand-name">Korpus admin</span>
+</a>
+{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'css/admin-brand.css' %}">
+{% endblock %}

@@ -1,4 +1,5 @@
 """URL configuration for the Korpus web project."""
+from common.views import RateLimitedLoginView
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
@@ -8,11 +9,12 @@ from django.urls import include, path
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("app/", include("accounts.urls")),
+    path("app/<slug:org_slug>/batches/", include("batches.urls")),
     path("api/", include("leads.urls")),
     # --- Auth (Django's built-in views, minimal Korpus-styled templates) ---
     path(
         "app/login/",
-        auth_views.LoginView.as_view(template_name="registration/login.html"),
+        RateLimitedLoginView.as_view(template_name="registration/login.html"),
         name="login",
     ),
     path("app/logout/", auth_views.LogoutView.as_view(), name="logout"),

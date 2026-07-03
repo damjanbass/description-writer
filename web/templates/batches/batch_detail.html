@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% load static %}
+{% load batches_extras %}
+
+{% block title %}{{ batch.name }} — {{ org.name }} — Korpus{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'css/batches.css' %}">
+{% if batch.status == "running" or batch.status == "uploaded" %}
+<meta http-equiv="refresh" content="5">
+{% endif %}
+{% endblock %}
+
+{% block org_name %}<span class="muted">{{ org.name }}</span>{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="{% url 'home' %}">Organizacije</a><span class="breadcrumb-sep">/</span><a href="{% url 'batches:list' org_slug=org.slug %}">{{ org.name }}</a><span class="breadcrumb-sep">/</span>{{ batch.name }}
+</div>
+
+<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+  <h1 class="page-title" style="display:flex;align-items:center;gap:14px">
+    {{ batch.name }}
+    <span class="badge {{ batch.status|batch_status_class }}">{{ batch.status|batch_status_label }}</span>
+  </h1>
+  {% if can_publish %}
+  <a href="{% url 'batches:publish' org_slug=org.slug pk=batch.pk %}" class="btn btn-primary">Objavi odobrene</a>
+  {% endif %}
+</div>
+
+{% if batch.status == "running" or batch.status == "uploaded" %}
+<p class="muted">Generisanje je u toku — stranica se osvežava automatski.</p>
+{% endif %}
+
+{% if batch.error_log %}
+<div class="error-card">
+  <div class="error-card-heading">Greške pri generisanju</div>
+  <div style="white-space:pre-wrap">{{ batch.error_log }}</div>
+</div>
+{% endif %}
+
+<div class="counts-strip">
+  <div class="counts-strip-item">
+    <div class="counts-strip-num">{{ counts.total }}</div>
+    <div class="counts-strip-label">Ukupno</div>
+  </div>
+  <div class="counts-strip-item">
+    <div class="counts-strip-num">{{ counts.pending }}</div>
+    <div class="counts-strip-label">Na čekanju</div>
+  </div>
+  <div class="counts-strip-item">
+    <div class="counts-strip-num">{{ counts.approved }}</div>
+    <div class="counts-strip-label">Odobreno</div>
+  </div>
+  <div class="counts-strip-item">
+    <div class="counts-strip-num">{{ counts.rejected }}</div>
+    <div class="counts-strip-label">Odbijeno</div>
+  </div>
+  <div class="counts-strip-item">
+    <div class="counts-strip-num">{{ counts.published }}</div>
+    <div class="counts-strip-label">Objavljeno</div>
+  </div>
+  <div class="counts-strip-item is-needs-review">
+    <div class="counts-strip-num">{{ counts.needs_review }}</div>
+    <div class="counts-strip-label">Za pregled</div>
+  </div>
+</div>
+
+{% if artifacts_ready %}
+<div class="artifact-list">
+  <a href="{% url 'batches:artifact' org_slug=org.slug pk=batch.pk kind='csv' %}" class="btn btn-ghost mono">↓ descriptions.csv</a>
+  <a href="{% url 'batches:artifact' org_slug=org.slug pk=batch.pk kind='queue' %}" class="btn btn-ghost mono">↓ review_queue.json</a>
+</div>
+{% endif %}
+
+<div class="filter-pills">
+  <a href="{% url 'batches:detail' org_slug=org.slug pk=batch.pk %}"
+     class="pill{% if not status_filter and not needs_review_only %} is-active{% endif %}">Sve</a>
+  {% for value, label in status_choices %}
+  <a href="?status={{ value }}"
+     class="pill{% if status_filter == value %} is-active{% endif %}">{{ value|item_status_label }}</a>
+  {% endfor %}
+  <a href="?pregled=1" class="pill{% if needs_review_only %} is-active{% endif %}">
+    <span class="flag-dot"></span>Za pregled
+  </a>
+</div>
+
+{% if items %}
+<div class="card" style="padding:0;overflow:hidden">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Proizvod</th>
+        <th>Pregled</th>
+        <th>Status</th>
+        <th>Napomena</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td class="mono"><a href="{% url 'batches:item' org_slug=org.slug pk=batch.pk item_pk=item.pk %}{% if status_filter %}?status={{ status_filter }}{% endif %}">{{ item.product_id }}</a></td>
+        <td>{% if item.needs_review %}<span class="flag-tag">PREGLED</span>{% endif %}</td>
+        <td><span class="badge {{ item.status|item_status_class }}">{{ item.status|item_status_label }}</span></td>
+        <td class="muted" style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          {% if item.publish_error %}<span style="color:var(--danger)">⚠ greška pri objavi</span>{% elif item.reason %}{{ item.reason }}{% endif %}
+        </td>
+        <td><a href="{% url 'batches:item' org_slug=org.slug pk=batch.pk item_pk=item.pk %}{% if status_filter %}?status={{ status_filter }}{% endif %}" class="btn btn-ghost">Pregledaj →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% elif batch.status == "completed" %}
+<div class="card empty-state">
+  <p>Nema stavki za izabrani filter.</p>
+</div>
+{% endif %}
+{% endblock %}

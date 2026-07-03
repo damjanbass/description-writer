@@ -51,7 +51,7 @@ INSTALLED_APPS = [
     "accounts",
     "leads",
     "connections",
-    # NOTE: `batches` is Phase 4 — do not add it here yet.
+    "batches",
 ]
 
 MIDDLEWARE = [
@@ -149,3 +149,30 @@ CACHES = {
         "LOCATION": "korpus_cache",
     }
 }
+
+# django-ratelimit stores counters in a cache; point it explicitly at the
+# shared "default" backend above rather than relying on its implicit default.
+RATELIMIT_USE_CACHE = "default"
+
+# ---------------------------------------------------------------------------
+# Session / cookie hardening (env-independent; prod.py adds the *_SECURE flags)
+# ---------------------------------------------------------------------------
+# JS can never read the session cookie (default True, stated explicitly).
+SESSION_COOKIE_HTTPONLY = True
+# Don't send cookies on cross-site requests; still allows top-level nav.
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = "Lax"
+# Sessions live 12h then require re-login; caps the window of a stolen cookie.
+SESSION_COOKIE_AGE = 12 * 60 * 60
+# Keep the 12h lifetime across browser restarts rather than expiring on close.
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+
+# ---------------------------------------------------------------------------
+# Upload limits
+# ---------------------------------------------------------------------------
+# Reject request bodies over 50 MB before parsing — aligned with the batch
+# upload cap so oversized uploads fail fast instead of exhausting memory.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 52_428_800  # 50 MB
+# Files larger than 5 MB stream to a temp file on disk instead of buffering
+# the whole thing in memory.
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 5 MB
