@@ -99,6 +99,25 @@ class RunGenerationTests(TestCase):
         self.assertEqual(log.actor, self.user)
         self.assertEqual(log.detail["total_count"], 2)
 
+    def test_product_cap_marks_batch_failed(self):
+        batch = _make_uploaded_batch(self.org, self.user)
+        with mock.patch.dict("os.environ", {"KORPUS_MAX_PRODUCTS_PER_BATCH": "1"}):
+            tasks.run_generation(batch.pk)
+        batch.refresh_from_db()
+        self.assertEqual(batch.status, Batch.Status.FAILED)
+        self.assertIn("per-batch limit", batch.error_log)
+        self.assertEqual(ReviewItem.objects.filter(batch=batch).count(), 0)
+
+    def test_status_claim_is_atomic_compare_and_swap(self):
+        batch = _make_uploaded_batch(self.org, self.user)
+        # Simulate a concurrent runner having already claimed the batch: the
+        # UPDATE ... WHERE status='uploaded' must claim zero rows and no-op.
+        Batch.objects.filter(pk=batch.pk).update(status=Batch.Status.RUNNING)
+        tasks.run_generation(batch.pk)
+        batch.refresh_from_db()
+        self.assertEqual(batch.status, Batch.Status.RUNNING)  # untouched
+        self.assertEqual(ReviewItem.objects.filter(batch=batch).count(), 0)
+
     def test_run_generation_bad_file_marks_failed_without_crashing(self):
         batch = Batch.objects.create(
             organization=self.org, name="Bad batch", provider=Batch.Provider.FAKE

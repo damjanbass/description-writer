@@ -96,12 +96,24 @@ def lead_create(request):
     if not _origin_or_referer_allowed(request):
         return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
 
+    # Check the declared length BEFORE touching request.body -- reading the
+    # body materializes up to DATA_UPLOAD_MAX_MEMORY_SIZE (50 MB) in memory,
+    # so an oversized request must be rejected from the header alone.
+    try:
+        content_length = int(request.META.get("CONTENT_LENGTH") or 0)
+    except (TypeError, ValueError):
+        content_length = 0
+    if content_length > MAX_BODY_BYTES:
+        return JsonResponse({"ok": False, "error": "payload_too_large"}, status=413)
+
     if len(request.body or b"") > MAX_BODY_BYTES:
         return JsonResponse({"ok": False, "error": "payload_too_large"}, status=413)
 
     try:
         data = json.loads(request.body.decode("utf-8"))
-    except (ValueError, UnicodeDecodeError):
+    except (ValueError, UnicodeDecodeError, RecursionError):
+        # RecursionError: a deeply nested JSON body (e.g. 10 KB of "[")
+        # blows the parser's stack -- treat it as invalid input, not a 500.
         return JsonResponse({"ok": False, "error": "invalid_json"}, status=400)
 
     if not isinstance(data, dict):

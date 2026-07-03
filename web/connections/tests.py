@@ -131,6 +131,13 @@ class ConnectorCredentialModelTests(TestCase):
     def test_http_localhost_ok(self):
         self._clean_with_url("http://localhost:8000")
 
+    def test_userinfo_in_url_rejected(self):
+        # https://key:secret@host would put credential material into
+        # connector exception strings persisted to publish_error/AuditLog.
+        with self.assertRaises(ValidationError) as ctx:
+            self._clean_with_url("https://ck_key:cs_secret@shop.example.com")
+        self.assertIn("base_url", ctx.exception.message_dict)
+
 
 @override_settings(DEBUG=True)
 class ConnectorCredentialAdminFormTests(TestCase):

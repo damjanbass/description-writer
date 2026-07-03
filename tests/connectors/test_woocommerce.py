@@ -225,6 +225,18 @@ class TestPushDescription:
         result = _make_connector(transport).push_description("1", dual)
         assert result is None
 
+    def test_product_id_is_url_quoted(self):
+        # product_id comes from an uploaded catalog: a hostile value must not
+        # be able to alter the request path or smuggle a query string.
+        transport = FakeTransport()
+        dual = DualScript(cirilica="a", latinica="a")
+        _make_connector(transport).push_description("../orders?x=1 y", dual)
+        url = transport.calls[0]["url"]
+        assert url == (
+            "https://shop.example.com/wp-json/wc/v3/products/"
+            "..%2Forders%3Fx%3D1%20y"
+        )
+
 
 class TestDefaultTransportAuth:
     def test_basic_auth_header_encodes_key_and_secret(self):

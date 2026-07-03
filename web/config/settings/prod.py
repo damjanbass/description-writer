@@ -48,12 +48,20 @@ CSRF_TRUSTED_ORIGINS = [
 # ---------------------------------------------------------------------------
 # Database — Postgres
 # ---------------------------------------------------------------------------
+# Fail loud on a missing password rather than silently connecting with "" —
+# consistent with how SECRET_KEY / ALLOWED_HOSTS are enforced above.
+_postgres_password = os.environ.get("POSTGRES_PASSWORD")
+if not _postgres_password:
+    raise RuntimeError(
+        "POSTGRES_PASSWORD environment variable is required in production."
+    )
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.environ.get("POSTGRES_DB", "korpus"),
         "USER": os.environ.get("POSTGRES_USER", "korpus"),
-        "PASSWORD": os.environ.get("POSTGRES_PASSWORD", ""),
+        "PASSWORD": _postgres_password,
         "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
         "PORT": os.environ.get("POSTGRES_PORT", "5432"),
     }
@@ -81,6 +89,28 @@ SECURE_SSL_REDIRECT = False
 # internal plain-HTTP hop. Silence only this one check so the rest of the
 # deploy audit stays a meaningful zero-warning gate.
 SILENCED_SYSTEM_CHECKS = ["security.W008"]
+
+# ---------------------------------------------------------------------------
+# Static / media
+# ---------------------------------------------------------------------------
+# Hashed + gzip/brotli-compressed static files, served directly by WhiteNoise
+# (middleware already installed in base.py). Filenames are content-hashed, so
+# they're safe to cache forever — see WHITENOISE_MAX_AGE below. Keep the
+# Django default for "default" (media uploads) unchanged.
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+# Hashed filenames never change contents, so browsers/CDNs may cache them
+# indefinitely (1 year, the practical maximum).
+WHITENOISE_MAX_AGE = 31536000
+# MEDIA_ROOT already resolves from KORPUS_MEDIA_ROOT in base.py; in compose
+# deploys that env var points at /data/media, a mounted volume — nothing to
+# duplicate here.
 
 # ---------------------------------------------------------------------------
 # Email — SMTP, configured via env (task 4D/5C to finalize provider/creds)

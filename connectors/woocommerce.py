@@ -67,7 +67,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable
 from typing import Protocol, runtime_checkable
-from urllib.parse import urlencode, urlparse
+from urllib.parse import quote, urlencode, urlparse
 
 from pipeline.types import DualScript, ProductRecord, Script
 
@@ -323,9 +323,11 @@ class WooCommerceConnector:
                 {"key": _ALT_SCRIPT_META_KEY, "value": dual.in_script(alt_script)}
             ],
         }
+        # product_id originates from an uploaded catalog: quote it so a value
+        # containing "/", "..", "?" or spaces cannot alter the request path.
         self._transport.request(
             "PUT",
-            f"{self._products_url}/{product_id}",
+            f"{self._products_url}/{quote(str(product_id), safe='')}",
             json=body,
         )
 

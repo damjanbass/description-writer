@@ -1,0 +1,23 @@
+# Build context is the repo root (docker build -f deploy/Dockerfile .).
+# Keep the context lean and never bake secrets, dev artifacts, or content
+# served separately (the landing page is mounted into Caddy from the host,
+# not copied into the app image) into the image.
+
+.git
+.venv
+venv
+__pycache__
+**/__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+
+web/db.sqlite3
+web/media
+web/staticfiles
+
+doc
+tests
+landing
+
+.env

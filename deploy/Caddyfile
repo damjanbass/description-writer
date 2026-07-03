@@ -1,0 +1,72 @@
+# Korpus reverse proxy (Caddy v2).
+#
+# Auto-HTTPS is Caddy's default behaviour (obtains + renews a Let's Encrypt
+# certificate for the site address below), so there is no explicit TLS
+# block here beyond the ACME contact email set as a global option.
+#
+# HSTS strategy: Django (web/config/settings/prod.py) already sends
+# Strict-Transport-Security on every response it renders (SECURE_HSTS_*),
+# since it's the origin for /app/*, /admin/*, /api/*, /static/*. Setting
+# HSTS again at Caddy for those *same* proxied responses would just repeat
+# an identical header — harmless per spec, but redundant and one more place
+# to keep in sync. The one thing Django never touches is the static
+# landing page (served straight off disk by `file_server`, no Django
+# involved), so that's where Caddy adds the security headers, including
+# HSTS, itself. Net effect: every response the browser sees carries HSTS
+# and the other hardening headers exactly once, from whichever layer
+# actually produced the response.
+{
+	email {$KORPUS_ACME_EMAIL:damjan9494@gmail.com}
+}
+
+{$KORPUS_DOMAIN:korpus.rs} {
+	encode gzip zstd
+
+	# --- Django-backed routes: proxy straight through to gunicorn. -----
+	# Static files are also served by WhiteNoise from inside the app
+	# container (see web/config/settings/base.py STATIC_ROOT), so
+	# /static/* is proxied rather than served by Caddy directly.
+	handle /app/* {
+		reverse_proxy app:8000
+	}
+	handle /admin/* {
+		reverse_proxy app:8000
+	}
+	handle /api/* {
+		reverse_proxy app:8000
+	}
+	handle /static/* {
+		reverse_proxy app:8000
+	}
+
+	# --- /media/* is deliberately NEVER routed here. --------------------
+	# Uploaded catalogs and generated outputs are only ever returned via
+	# authenticated Django views (FileResponse from web/batches/views.py),
+	# which stream the file after checking org membership. There is no
+	# public MEDIA_URL route in production (see web/config/urls.py: the
+	# `static(settings.MEDIA_URL, ...)` helper is only added when
+	# settings.DEBUG is True). Falling through to the default `handle`
+	# below means a request to /media/* just 404s against the landing
+	# page's static files, exactly as intended.
+
+	# --- Everything else: the static marketing landing page. ------------
+	handle {
+		root * /srv/landing
+		file_server
+
+		header {
+			X-Content-Type-Options nosniff
+			Referrer-Policy same-origin
+			X-Frame-Options DENY
+			# Landing page uses inline `style="..."` attributes and one
+			# same-origin <script src="korpus.js">; everything else
+			# (fonts, images) is same-origin too. No inline <script>, so
+			# script-src stays 'self' with no 'unsafe-inline'.
+			Content-Security-Policy "default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; form-action 'self'"
+			# See the HSTS note at the top of this file: Django never
+			# renders this page, so Caddy is the only layer that can set
+			# this header for it.
+			Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		}
+	}
+}

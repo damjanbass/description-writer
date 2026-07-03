@@ -119,6 +119,31 @@ class LeadCreateTests(TestCase):
         response = self.client.get(LEAD_URL)
         self.assertEqual(response.status_code, 405)
 
+    def test_deeply_nested_json_returns_400_not_500(self):
+        # ~4k of "[" underneath the 10 KB cap blows json's recursion limit;
+        # must surface as invalid_json, never a 500.
+        body = "[" * 4000
+        response = self.client.post(
+            LEAD_URL,
+            data=body,
+            content_type="application/json",
+            HTTP_ORIGIN="http://testserver",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Lead.objects.count(), 0)
+
+    def test_oversized_content_length_rejected_from_header(self):
+        # The declared length alone must trigger the 413 -- the body is never
+        # read (spoofed header, tiny actual body).
+        response = self.client.post(
+            LEAD_URL,
+            data="{}",
+            content_type="application/json",
+            HTTP_ORIGIN="http://testserver",
+            CONTENT_LENGTH=str(11 * 1024),
+        )
+        self.assertEqual(response.status_code, 413)
+
     def test_sixth_request_in_an_hour_is_rate_limited(self):
         payload = {
             "ime": "Pera Peric",

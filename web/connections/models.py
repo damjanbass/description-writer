@@ -109,3 +109,16 @@ class ConnectorCredential(models.Model):
                     )
                 }
             )
+        # Userinfo in the URL (https://key:secret@host) would put credential
+        # material into connector exception strings, which are persisted to
+        # publish_error / AuditLog.detail. Credentials belong in the
+        # encrypted fields only.
+        if parsed.username or parsed.password:
+            raise ValidationError(
+                {
+                    "base_url": (
+                        "base_url must not embed credentials (user:pass@); "
+                        "use the consumer key/secret fields."
+                    )
+                }
+            )

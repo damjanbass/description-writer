@@ -24,8 +24,10 @@ from django.db.models import Count, Q
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
+from django.utils.decorators import method_decorator
 from django.views.generic import CreateView, DetailView, FormView, ListView, View
 from django_q.tasks import async_task
+from django_ratelimit.decorators import ratelimit
 
 from .bridge import export_review_queue_json
 from .forms import BatchPublishForm, BatchUploadForm
@@ -55,12 +57,31 @@ class BatchListView(LoginRequiredMixin, OrgMembershipRequiredMixin, ListView):
         return context
 
 
+@method_decorator(
+    ratelimit(key="user", rate="10/h", method="POST", block=False), name="post"
+)
 class BatchUploadView(LoginRequiredMixin, OrgMembershipRequiredMixin, CreateView):
-    """Upload a catalog file, kicking off `batches.tasks.run_generation`."""
+    """Upload a catalog file, kicking off `batches.tasks.run_generation`.
+
+    POST is rate-limited per user (10 uploads/hour): each upload can trigger
+    one LLM call per product, so upload frequency is a spend boundary, not
+    just a UX nicety. The per-batch product cap lives in `tasks.py`.
+    """
 
     model = Batch
     form_class = BatchUploadForm
     template_name = "batches/batch_upload.html"
+
+    def post(self, request, *args, **kwargs):
+        if getattr(request, "limited", False):
+            messages.error(
+                request,
+                "Previše otpremanja u kratkom periodu. Pokušajte ponovo kasnije.",
+            )
+            return redirect(
+                reverse("batches:list", kwargs={"org_slug": self.org.slug})
+            )
+        return super().post(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

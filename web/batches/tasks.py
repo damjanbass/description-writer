@@ -12,6 +12,7 @@ a saved `Batch`; the model<->dataclass field mapping itself lives in
 from __future__ import annotations
 
 import logging
+import os
 
 from connections.models import ConnectorCredential
 from django.contrib.auth import get_user_model
@@ -48,6 +49,15 @@ _ERROR_LOG_MAX_CHARS = 10_000
 _PUBLISH_ERROR_MAX_CHARS = 1_000
 
 
+def _max_products_per_batch() -> int:
+    """Per-batch product cap: bounds LLM spend from a single upload.
+
+    Env-overridable so an enterprise catalog run can raise it deliberately;
+    the default matches the largest pilot-tier batch (20k SKU).
+    """
+    return int(os.environ.get("KORPUS_MAX_PRODUCTS_PER_BATCH", "20000"))
+
+
 def run_generation(batch_id: int) -> None:
     """Ingest -> generate -> correct -> write artifacts -> ReviewItems.
 
@@ -69,20 +79,34 @@ def run_generation(batch_id: int) -> None:
         logger.warning("run_generation: Batch %s does not exist.", batch_id)
         return
 
-    if batch.status != Batch.Status.UPLOADED:
+    # Atomic compare-and-swap on the status: a plain read-check-then-save
+    # would let two concurrent runs (double enqueue, django_q retry) both see
+    # UPLOADED and both generate -- double LLM spend and an IntegrityError on
+    # the second bulk_create. The single UPDATE ... WHERE status='uploaded'
+    # guarantees exactly one runner wins.
+    claimed = Batch.objects.filter(
+        pk=batch_id, status=Batch.Status.UPLOADED
+    ).update(status=Batch.Status.RUNNING)
+    if not claimed:
         logger.info(
             "run_generation: Batch %s is %s, not uploaded; skipping.",
             batch_id,
             batch.status,
         )
         return
-
     batch.status = Batch.Status.RUNNING
-    batch.save(update_fields=["status"])
 
     error_log = ""
     try:
         records = read_products(batch.source_file.path)
+
+        if len(records) > _max_products_per_batch():
+            raise ValueError(
+                f"Batch has {len(records)} products, over the "
+                f"{_max_products_per_batch()} per-batch limit "
+                "(KORPUS_MAX_PRODUCTS_PER_BATCH). Split the catalog into "
+                "smaller files."
+            )
 
         if batch.provider == Batch.Provider.ANTHROPIC:
             # api_key is intentionally omitted: AnthropicProvider falls back
