@@ -1,0 +1,120 @@
+/* =========================================================
+   Korpus UI — first-run guided tour
+   Extends korpus-ui.css tokens. Loaded on every page; only
+   active once JS injects .korpus-tour-overlay into the DOM.
+   ========================================================= */
+
+.korpus-tour-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  pointer-events: none;
+}
+
+/* the ring IS the dimmer: a transparent box whose giant box-shadow
+   covers the viewport, leaving a cut-out "spotlight" around the target */
+.korpus-tour-ring {
+  position: fixed;
+  box-shadow: 0 0 0 9999px rgba(10, 14, 22, 0.45);
+  border-radius: 12px;
+  pointer-events: none;
+  transition: top 180ms ease, left 180ms ease, width 180ms ease, height 180ms ease;
+}
+
+.korpus-tour-card {
+  position: fixed;
+  z-index: 2001;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px 20px;
+  box-shadow: 0 12px 32px -16px rgba(10, 16, 24, 0.45);
+  pointer-events: auto;
+  transition: top 180ms ease, left 180ms ease;
+}
+
+.korpus-tour-step {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.korpus-tour-title {
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: 16.5px;
+  margin-bottom: 6px;
+  line-height: 1.25;
+}
+
+.korpus-tour-text {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+
+.korpus-tour-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.korpus-tour-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.korpus-tour-card .btn {
+  padding: 8px 14px;
+  font-size: 13px;
+}
+
+.korpus-tour-card .btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- inline spinner (batch generating notice) ---------- */
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(47, 107, 255, 0.25);
+  border-top-color: var(--accent);
+  border-radius: 999px;
+  vertical-align: middle;
+  margin-right: 4px;
+  animation: korpus-spin 700ms linear infinite;
+}
+
+@keyframes korpus-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .korpus-tour-ring,
+  .korpus-tour-card {
+    transition: none;
+  }
+  .spinner {
+    animation-duration: 1400ms;
+  }
+}
+
+@media (max-width: 480px) {
+  .korpus-tour-card {
+    top: auto !important;
+    left: 16px !important;
+    right: 16px;
+    bottom: 16px;
+    width: auto;
+    max-width: none;
+  }
+}

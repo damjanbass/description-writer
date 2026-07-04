@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Vodič — Korpus{% endblock %}
+
+{% block tour_page %}{% endblock %}
+
+{% block extra_head %}
+{# provenance-entry / flag-tag / badge component styles live in batches.css #}
+<link rel="stylesheet" href="{% static 'css/batches.css' %}">
+{% endblock %}
+
+{% block content %}
+
+<section class="card" style="margin-bottom:20px">
+  <h1 class="page-title">Kako Korpus radi</h1>
+  <p class="muted" style="margin-top:10px;max-width:70ch">
+    Korpus je mašina za tačne i usklađene opise proizvoda na srpskom — oba pisma nastaju iz jedne
+    generacije, a svaka tvrdnja u opisu ima izvor u atributima proizvoda. Ništa se ne objavljuje
+    u prodavnici bez vašeg odobrenja.
+  </p>
+</section>
+
+<section class="card" style="margin-bottom:20px">
+  <h2 style="margin-bottom:16px">Tok rada</h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px">
+
+    <div style="border:1px solid var(--line);border-radius:12px;padding:18px">
+      <div class="mono" style="color:var(--accent);font-weight:700;margin-bottom:8px">1</div>
+      <div style="font-weight:700;margin-bottom:6px">Otpremite katalog</div>
+      <p class="muted" style="font-size:14px">CSV ili XLSX fajl, gde svaki red predstavlja jedan
+      proizvod sa svojim atributima. To su jedini podaci koje Korpus koristi.</p>
+    </div>
+
+    <div style="border:1px solid var(--line);border-radius:12px;padding:18px">
+      <div class="mono" style="color:var(--accent);font-weight:700;margin-bottom:8px">2</div>
+      <div style="font-weight:700;margin-bottom:6px">Korpus generiše</div>
+      <p class="muted" style="font-size:14px">Opis nastaje istovremeno na ćirilici i latinici, a
+      gramatika (padeži, slaganje roda i broja) proverava se deterministički.</p>
+    </div>
+
+    <div style="border:1px solid var(--line);border-radius:12px;padding:18px">
+      <div class="mono" style="color:var(--accent);font-weight:700;margin-bottom:8px">3</div>
+      <div style="font-weight:700;margin-bottom:6px">Vi pregledate</div>
+      <p class="muted" style="font-size:14px">Stavke označene za pregled prikazuju se prve.
+      Odobrite ih ili odbijte uz razlog — odluka se uvek beleži.</p>
+    </div>
+
+    <div style="border:1px solid var(--line);border-radius:12px;padding:18px">
+      <div class="mono" style="color:var(--accent);font-weight:700;margin-bottom:8px">4</div>
+      <div style="font-weight:700;margin-bottom:6px">Objavite</div>
+      <p class="muted" style="font-size:14px">Odobreni opisi se jednim klikom šalju u prodavnicu,
+      povezani preko izabranog konektora.</p>
+    </div>
+
+  </div>
+</section>
+
+<section class="card" style="margin-bottom:20px">
+  <h2 style="margin-bottom:16px">Statusi</h2>
+  <div style="display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span class="badge badge-pending">NA ČEKANJU</span>
+      <span class="muted">Opis čeka vašu odluku.</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span class="badge badge-approved">ODOBRENO</span>
+      <span class="muted">Spreman za objavu.</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span class="badge badge-rejected">ODBIJENO</span>
+      <span class="muted">Neće se objaviti; razlog je zabeležen.</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span class="badge badge-published">OBJAVLJENO</span>
+      <span class="muted">Poslat u prodavnicu.</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span class="flag-tag">PREGLED</span>
+      <span class="muted">Automatska provera preporučuje ljudski pregled ove stavke.</span>
+    </div>
+  </div>
+</section>
+
+<section class="card" style="margin-bottom:20px">
+  <h2 style="margin-bottom:16px">Poreklo tvrdnji</h2>
+  <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+    <div class="provenance-entry provenance-entry-supported">
+      <span class="provenance-entry-sentence">Crna majica od 100% pamuka.</span>
+      <div class="provenance-attrs">← boja=crna · materijal=pamuk</div>
+    </div>
+    <div class="provenance-entry provenance-entry-unsupported">
+      <span class="provenance-entry-sentence">Otporna na vodu do 50 m.</span>
+      <span class="provenance-tag">⚠ NEMA IZVORA</span>
+    </div>
+  </div>
+  <p class="muted" style="font-size:14px">Zelena oznaka znači da tvrdnja ima izvor u atributima
+  proizvoda; narandžasta znači da izvora nema i takvu rečenicu ne treba objaviti bez provere.</p>
+</section>
+
+<section class="card" style="margin-bottom:20px">
+  <h2 style="margin-bottom:16px">Format kataloga</h2>
+  <p class="muted" style="font-size:14px;max-width:70ch;margin-bottom:14px">
+    Katalog se učitava kao CSV (razdvojen zarezom ili tačka-zapetom) ili XLSX. Obavezna je kolona
+    sa identifikatorom proizvoda (npr. ID, SKU ili šifra) i kolona sa nazivom. Sve ostale kolone
+    tretiraju se kao atributi proizvoda (boja, materijal, veličina...) i jedini su izvor podataka
+    za generisanje opisa.
+  </p>
+  <div class="mono" style="background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:12px 14px;font-size:13px;margin-bottom:16px;overflow-x:auto">
+    id;naziv;boja;materijal<br>
+    1;Bela majica;bela;pamuk<br>
+    2;Crna jakna;crna;poliester
+  </div>
+  <a class="btn btn-ghost" href="{% static 'samples/korpus-primer.csv' %}" download>Preuzmi primer CSV-a</a>
+</section>
+
+<section class="card" style="margin-bottom:20px">
+  <h2 style="margin-bottom:16px">Objavljivanje</h2>
+  <p class="muted" style="font-size:14px;max-width:70ch">
+    WooCommerce konektor je aktivan. Selltico i TAU Commerce su u pripremi — izbor postoji u
+    formi, ali objava preko njih glasno prijavi grešku i ne menja ništa u prodavnici. Kredencijali
+    prodavnice čuvaju se šifrovano, a objavu uvek pokreće samo član organizacije.
+  </p>
+</section>
+
+<section class="card" style="margin-bottom:20px">
+  <h2 style="margin-bottom:16px">Česta pitanja</h2>
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div>
+      <div style="font-weight:700;margin-bottom:4px">Zašto je stavka označena ZA PREGLED?</div>
+      <p class="muted" style="font-size:14px">Automatska provera je uočila tvrdnju bez jasnog
+      izvora u atributima ili nesigurnost u gramatičkoj obradi, pa traži ljudsku potvrdu pre
+      objave.</p>
+    </div>
+    <div>
+      <div style="font-weight:700;margin-bottom:4px">Mogu li da izmenim opis?</div>
+      <p class="muted" style="font-size:14px">Trenutno ne direktno u aplikaciji — odbijte stavku
+      uz razlog i ponovo pokrenite generisanje za seriju.</p>
+    </div>
+    <div>
+      <div style="font-weight:700;margin-bottom:4px">Ko može da odobrava?</div>
+      <p class="muted" style="font-size:14px">Svaki član organizacije. Sve odluke o odobravanju i
+      odbijanju beleže se u dnevniku.</p>
+    </div>
+    <div>
+      <div style="font-weight:700;margin-bottom:4px">Šta ako objava ne uspe?</div>
+      <p class="muted" style="font-size:14px">Stavka ostaje u statusu ODOBRENO, greška se
+      prikazuje na samoj stavci, a objavu možete pokušati ponovo.</p>
+    </div>
+    <div>
+      <div style="font-weight:700;margin-bottom:4px">Da li se nešto objavljuje automatski?</div>
+      <p class="muted" style="font-size:14px">Ne — nikada. Objava se uvek pokreće ručno, nakon
+      odobrenja.</p>
+    </div>
+  </div>
+</section>
+
+<section class="card" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+  <a class="btn btn-ghost" href="{% url 'home' %}">Nazad na aplikaciju</a>
+  <button type="button" class="btn btn-primary" onclick="if(window.KorpusTour)KorpusTour.restart()">Pokreni vodič kroz ekran</button>
+</section>
+
+{% endblock %}

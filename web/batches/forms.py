@@ -59,6 +59,16 @@ class BatchUploadForm(forms.ModelForm):
                 attrs={"class": "input", "placeholder": "podrazumevani model"}
             ),
         }
+        help_texts = {
+            "name": "Interni naziv, samo za vas. Ako ga izostavite, koristi se ime fajla.",
+            "source_file": "CSV ili XLSX do 50 MB. Svaki red je jedan proizvod sa atributima.",
+            "source_script": "Pismo u kojem su UNETI podaci — oba pisma se uvek generišu.",
+            "provider": (
+                "„Test (bez LLM)“ pravi demo opise bez troška — idealno za probu. "
+                "„Anthropic“ koristi pravi AI model."
+            ),
+            "model": "Ostavite prazno za podrazumevani model.",
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

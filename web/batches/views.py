@@ -30,6 +30,7 @@ from django_q.tasks import async_task
 from django_ratelimit.decorators import ratelimit
 
 from .bridge import export_review_queue_json
+from .demo import seed_demo_batch
 from .forms import BatchPublishForm, BatchUploadForm
 from .models import AuditLog, Batch, ReviewItem
 
@@ -108,6 +109,23 @@ class BatchUploadView(LoginRequiredMixin, OrgMembershipRequiredMixin, CreateView
         return reverse(
             "batches:detail", kwargs={"org_slug": self.org.slug, "pk": self.object.pk}
         )
+
+
+class DemoSeedView(LoginRequiredMixin, OrgMembershipRequiredMixin, View):
+    """One-click demo batch: real pipeline run (fake provider) + a
+    demonstrative status mix, so a fresh org can explore every screen
+    without preparing a file. Also handy in sales demos.
+    """
+
+    http_method_names = ["post"]
+
+    def post(self, request, *args, **kwargs):
+        batch = seed_demo_batch(self.org, request.user)
+        messages.success(
+            request,
+            "Demo serija je učitana — slobodno istražite i probajte odobravanje.",
+        )
+        return redirect("batches:detail", org_slug=self.org.slug, pk=batch.pk)
 
 
 class BatchDetailView(LoginRequiredMixin, OrgMembershipRequiredMixin, DetailView):

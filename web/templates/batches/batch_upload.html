@@ -26,6 +26,7 @@
     <div class="field">
       <label for="{{ field.id_for_label }}">{{ field.label }}</label>
       {{ field }}
+      {% if field.help_text %}<div class="muted" style="font-size:13px;margin-top:5px">{{ field.help_text }}</div>{% endif %}
       {% if field.errors %}<div class="error-card" style="margin:8px 0 0">{{ field.errors }}</div>{% endif %}
     </div>
     {% endfor %}
@@ -37,8 +38,8 @@
 </div>
 
 <p class="muted" style="max-width:560px;margin-top:16px;font-size:13.5px">
-  Podržani formati: CSV i XLSX, do 50 MB. Svaki red je jedan proizvod sa
-  strukturiranim atributima. Opisi se generišu isključivo iz unetih atributa —
-  ništa se ne izmišlja, a svaka stavka čeka vaše odobrenje pre objave.
+  Nemate fajl pri ruci?
+  <a href="{% static 'samples/korpus-primer.csv' %}" download>Preuzmite primer CSV-a</a>
+  ili se vratite na listu i kliknite „Učitaj demo seriju".
 </p>
 {% endblock %}

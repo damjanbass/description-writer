@@ -4,6 +4,8 @@
 
 {% block title %}Serije — {{ org.name }} — Korpus{% endblock %}
 
+{% block tour_page %}batch-list{% endblock %}
+
 {% block extra_head %}
 <link rel="stylesheet" href="{% static 'css/batches.css' %}">
 {% endblock %}
@@ -18,12 +20,18 @@
 <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:24px">
   <h1 class="page-title">Serije</h1>
   {% if batches %}
-  <a href="{% url 'batches:upload' org_slug=org.slug %}" class="btn btn-primary">Nova serija</a>
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
+    <form method="post" action="{% url 'batches:demo' org_slug=org.slug %}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-ghost" data-tour="demo-btn">Učitaj demo seriju</button>
+    </form>
+    <a href="{% url 'batches:upload' org_slug=org.slug %}" class="btn btn-primary" data-tour="upload-btn">Nova serija</a>
+  </div>
   {% endif %}
 </div>
 
 {% if batches %}
-<div class="card" style="padding:0;overflow:hidden">
+<div class="card" style="padding:0;overflow:hidden" data-tour="batch-table">
   <table class="table">
     <thead>
       <tr>
@@ -59,9 +67,36 @@
 {% endif %}
 
 {% else %}
-<div class="card empty-state">
-  <p>Još nema serija. Otpremite CSV ili XLSX da počnete.</p>
-  <a href="{% url 'batches:upload' org_slug=org.slug %}" class="btn btn-primary">Otpremi katalog</a>
+<div class="card" style="max-width:860px;padding:clamp(28px,4vw,44px)">
+  <h2 style="margin-bottom:8px">Dobrodošli u Korpus</h2>
+  <p class="muted" style="max-width:60ch;margin-bottom:28px">
+    Tri koraka od kataloga do objavljenih opisa — a ništa se ne objavljuje bez vašeg odobrenja.
+  </p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:28px">
+    <div style="border:1px solid var(--line);border-radius:12px;padding:18px">
+      <div class="mono" style="color:var(--accent);font-weight:700;margin-bottom:8px">1</div>
+      <div style="font-weight:700;margin-bottom:6px">Otpremite katalog</div>
+      <p class="muted" style="font-size:14px">CSV ili XLSX fajl sa proizvodima i atributima.</p>
+    </div>
+    <div style="border:1px solid var(--line);border-radius:12px;padding:18px">
+      <div class="mono" style="color:var(--accent);font-weight:700;margin-bottom:8px">2</div>
+      <div style="font-weight:700;margin-bottom:6px">Pregledajte i odobrite</div>
+      <p class="muted" style="font-size:14px">Svaki opis čeka vašu odluku — ništa se ne objavljuje samo.</p>
+    </div>
+    <div style="border:1px solid var(--line);border-radius:12px;padding:18px">
+      <div class="mono" style="color:var(--accent);font-weight:700;margin-bottom:8px">3</div>
+      <div style="font-weight:700;margin-bottom:6px">Objavite u prodavnicu</div>
+      <p class="muted" style="font-size:14px">Odobreni opisi idu u WooCommerce jednim klikom.</p>
+    </div>
+  </div>
+  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+    <a href="{% url 'batches:upload' org_slug=org.slug %}" class="btn btn-primary" data-tour="upload-btn">Otpremi katalog</a>
+    <form method="post" action="{% url 'batches:demo' org_slug=org.slug %}" style="display:inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-ghost" data-tour="demo-btn">Učitaj demo seriju</button>
+    </form>
+    <a href="{% url 'guide' %}" class="muted" style="font-size:14px">Pogledajte vodič →</a>
+  </div>
 </div>
 {% endif %}
 {% endblock %}

@@ -82,15 +82,31 @@ class HomeViewTests(TestCase):
     def setUp(self):
         self.org = Organization.objects.create(name="Acme Corp", slug="acme-corp")
 
-    def test_member_sees_their_org(self):
+    def test_single_org_member_is_redirected_to_batches(self):
         user = User.objects.create_user(username="member", password="pw12345!")
         Membership.objects.create(user=user, organization=self.org)
         self.client.force_login(user)
 
         response = self.client.get(reverse("home"))
 
+        self.assertRedirects(
+            response,
+            reverse("batches:list", kwargs={"org_slug": self.org.slug}),
+            fetch_redirect_response=False,
+        )
+
+    def test_multi_org_member_sees_org_list(self):
+        other = Organization.objects.create(name="Other Org", slug="other-org")
+        user = User.objects.create_user(username="member2", password="pw12345!")
+        Membership.objects.create(user=user, organization=self.org)
+        Membership.objects.create(user=user, organization=other)
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("home"))
+
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Acme Corp")
+        self.assertContains(response, "Other Org")
 
     def test_staff_sees_all_orgs(self):
         Organization.objects.create(name="Other Org", slug="other-org")

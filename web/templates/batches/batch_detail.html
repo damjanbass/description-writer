@@ -4,6 +4,8 @@
 
 {% block title %}{{ batch.name }} — {{ org.name }} — Korpus{% endblock %}
 
+{% block tour_page %}batch-detail{% endblock %}
+
 {% block extra_head %}
 <link rel="stylesheet" href="{% static 'css/batches.css' %}">
 {% if batch.status == "running" or batch.status == "uploaded" %}
@@ -24,12 +26,12 @@
     <span class="badge {{ batch.status|batch_status_class }}">{{ batch.status|batch_status_label }}</span>
   </h1>
   {% if can_publish %}
-  <a href="{% url 'batches:publish' org_slug=org.slug pk=batch.pk %}" class="btn btn-primary">Objavi odobrene</a>
+  <a href="{% url 'batches:publish' org_slug=org.slug pk=batch.pk %}" class="btn btn-primary" data-tour="publish">Objavi odobrene</a>
   {% endif %}
 </div>
 
 {% if batch.status == "running" or batch.status == "uploaded" %}
-<p class="muted">Generisanje je u toku — stranica se osvežava automatski.</p>
+<p class="muted"><span class="spinner" aria-hidden="true"></span>Generisanje je u toku — stranica se osvežava automatski.</p>
 {% endif %}
 
 {% if batch.error_log %}
@@ -39,7 +41,7 @@
 </div>
 {% endif %}
 
-<div class="counts-strip">
+<div class="counts-strip" data-tour="counts">
   <div class="counts-strip-item">
     <div class="counts-strip-num">{{ counts.total }}</div>
     <div class="counts-strip-label">Ukupno</div>
@@ -67,13 +69,13 @@
 </div>
 
 {% if artifacts_ready %}
-<div class="artifact-list">
+<div class="artifact-list" data-tour="artifacts">
   <a href="{% url 'batches:artifact' org_slug=org.slug pk=batch.pk kind='csv' %}" class="btn btn-ghost mono">↓ descriptions.csv</a>
   <a href="{% url 'batches:artifact' org_slug=org.slug pk=batch.pk kind='queue' %}" class="btn btn-ghost mono">↓ review_queue.json</a>
 </div>
 {% endif %}
 
-<div class="filter-pills">
+<div class="filter-pills" data-tour="filters">
   <a href="{% url 'batches:detail' org_slug=org.slug pk=batch.pk %}"
      class="pill{% if not status_filter and not needs_review_only %} is-active{% endif %}">Sve</a>
   {% for value, label in status_choices %}
@@ -86,7 +88,7 @@
 </div>
 
 {% if items %}
-<div class="card" style="padding:0;overflow:hidden">
+<div class="card" style="padding:0;overflow:hidden" data-tour="items">
   <table class="table">
     <thead>
       <tr>

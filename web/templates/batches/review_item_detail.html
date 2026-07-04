@@ -4,6 +4,8 @@
 
 {% block title %}{{ item.product_id }} — {{ batch.name }} — Korpus{% endblock %}
 
+{% block tour_page %}review-item{% endblock %}
+
 {% block extra_head %}
 <link rel="stylesheet" href="{% static 'css/batches.css' %}">
 {% endblock %}
@@ -27,7 +29,7 @@
 </div>
 {% endif %}
 
-<div class="review-panels">
+<div class="review-panels" data-tour="panels">
   <section class="review-panel">
     <div class="review-panel-label">Ћирилица</div>
     <div class="review-panel-text">{{ item.cirilica }}</div>
@@ -38,7 +40,7 @@
   </section>
 </div>
 
-<div class="provenance-section">
+<div class="provenance-section" data-tour="provenance">
   <div class="provenance-heading">Poreklo tvrdnji — svaka rečenica i njen izvor</div>
   {% if provenance_entries %}
   <div class="provenance-list">
@@ -58,7 +60,7 @@
 </div>
 
 {% if attributes %}
-<div class="provenance-section">
+<div class="provenance-section" data-tour="attributes">
   <div class="provenance-heading">Ulazni atributi — jedini izvor podataka</div>
   <div class="attr-chips">
     {% for key, value in attributes %}
@@ -78,7 +80,7 @@
 </div>
 
 <div class="action-bar-spacer"></div>
-<div class="action-bar">
+<div class="action-bar" data-tour="action-bar">
   <div class="action-bar-status">
     <span class="badge {{ item.status|item_status_class }}">{{ item.status|item_status_label }}</span>
     {% if item.status == "published" %}

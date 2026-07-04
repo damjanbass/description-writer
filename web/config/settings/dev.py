@@ -17,4 +17,14 @@ DATABASES = {
 # django_q runs tasks inline in the request/management-command process.
 Q_CLUSTER = {**Q_CLUSTER, "sync": True}  # noqa: F405
 
+# Local memory cache in dev: the runserver process is single-process, so
+# rate limiting still works, and there's no `createcachetable` step to
+# forget (prod keeps the shared DatabaseCache; its table is created by the
+# Docker entrypoint).
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+    }
+}
+
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
