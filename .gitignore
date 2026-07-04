@@ -14,3 +14,5 @@ web/db.sqlite3
 web/media/
 web/staticfiles/
 *.sqlite3
+
+.vercel
