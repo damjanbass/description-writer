@@ -15,29 +15,31 @@ own DESIGN NOTES describe.
 """
 from __future__ import annotations
 
+from datetime import timedelta
+
 from common.org import OrgMembershipRequiredMixin
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, Q
-from django.http import FileResponse, Http404, HttpResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.generic import CreateView, DetailView, FormView, ListView, View
-from django_q.tasks import async_task
 from django_ratelimit.decorators import ratelimit
 
-from .bridge import export_review_queue_json
+from .bridge import export_descriptions_csv, export_review_queue_json
 from .demo import seed_demo_batch
+from .dispatch import dispatch
 from .forms import BatchPublishForm, BatchUploadForm
 from .models import AuditLog, Batch, ReviewItem
 
-# Artifact "kind" -> filename under batch.artifacts_dir, and the download's
-# attachment filename + content type. Kept as one lookup table so
-# ArtifactDownloadView's dispatch and BatchDetailView's "which links to show"
-# logic can't silently drift apart.
+# The artifact "kinds" ArtifactDownloadView can generate (both built from
+# ReviewItem rows via bridge.py). Kept as one lookup so the view's dispatch
+# and BatchDetailView's "which links to show" logic can't silently drift.
 _ARTIFACT_KINDS = {"csv", "queue"}
 
 
@@ -99,7 +101,7 @@ class BatchUploadView(LoginRequiredMixin, OrgMembershipRequiredMixin, CreateView
             action=AuditLog.Action.UPLOAD,
             batch=self.object,
         )
-        async_task("batches.tasks.run_generation", self.object.pk)
+        dispatch("batches.tasks.run_generation", self.object.pk)
         messages.success(
             self.request, "Serija je otpremljena. Generisanje opisa je pokrenuto."
         )
@@ -328,7 +330,7 @@ class BatchPublishView(LoginRequiredMixin, OrgMembershipRequiredMixin, FormView)
             form.add_error("credential", "Nevažeći nalog za ovu organizaciju.")
             return self.form_invalid(form)
 
-        async_task(
+        dispatch(
             "batches.tasks.publish_batch",
             self.batch.pk,
             credential.pk,
@@ -344,9 +346,12 @@ class BatchPublishView(LoginRequiredMixin, OrgMembershipRequiredMixin, FormView)
 class ArtifactDownloadView(LoginRequiredMixin, OrgMembershipRequiredMixin, View):
     """Serve a completed batch's downloadable artifacts.
 
-    Never proxies through MEDIA_URL directly -- both kinds are streamed back
-    through the view itself so the org-membership check on `self.org` always
-    runs first.
+    Both kinds are generated from the `ReviewItem` rows on the fly (see
+    bridge.export_descriptions_csv / export_review_queue_json) -- the DB is
+    the source of truth for generated copy, and serverless deployments have
+    no filesystem artifacts to read anyway. Streaming through the view (not
+    MEDIA_URL) keeps the org-membership check on `self.org` in front of
+    every download.
     """
 
     def get(self, request, *args, **kwargs):
@@ -356,18 +361,68 @@ class ArtifactDownloadView(LoginRequiredMixin, OrgMembershipRequiredMixin, View)
             raise Http404("Unknown artifact kind.")
 
         if kind == "csv":
-            path = batch.artifacts_dir / "descriptions.csv"
-            if not path.exists():
+            # Only offered once the batch is terminal-complete: mid-run the
+            # rows exist incrementally, and a partial CSV would silently
+            # look like the whole catalog.
+            if batch.status != Batch.Status.COMPLETED:
                 raise Http404("descriptions.csv not yet available.")
-            return FileResponse(
-                open(path, "rb"),
-                as_attachment=True,
-                filename="descriptions.csv",
-                content_type="text/csv",
+            payload = export_descriptions_csv(batch)
+            response = HttpResponse(payload, content_type="text/csv")
+            response["Content-Disposition"] = (
+                'attachment; filename="descriptions.csv"'
             )
+            return response
 
         # kind == "queue"
         payload = export_review_queue_json(batch)
         response = HttpResponse(payload, content_type="application/json")
         response["Content-Disposition"] = 'attachment; filename="review_queue.json"'
         return response
+
+
+# How long a RUNNING batch may go without a progress heartbeat before the
+# status endpoint assumes its chunk crashed (never dispatched a
+# continuation) and re-kicks it. Generous vs. the per-product LLM latency,
+# small vs. a human noticing a stuck batch.
+_STALL_AFTER_RUNNING = timedelta(minutes=2)
+# How long a batch may sit UPLOADED (dispatch lost before any chunk ran)
+# before the same backstop re-dispatches the initial run.
+_STALL_AFTER_UPLOADED = timedelta(minutes=1)
+
+
+class BatchStatusView(LoginRequiredMixin, OrgMembershipRequiredMixin, View):
+    """Machine-readable progress for the batch detail page's poller.
+
+    Doubles as the stall backstop that makes chunked execution self-healing
+    without any cron: if generation looks stuck -- RUNNING with a stale
+    `last_progress_at` heartbeat, or UPLOADED for longer than a dispatch
+    could plausibly take -- re-dispatch `run_generation`. Safe to fire
+    spuriously: the task's status CAS and per-product idempotency make a
+    duplicate runner harmless (see tasks.py's module docstring).
+    """
+
+    def get(self, request, *args, **kwargs):
+        batch = get_object_or_404(Batch, pk=kwargs["pk"], organization=self.org)
+
+        rekicked = False
+        now = timezone.now()
+        if batch.status == Batch.Status.RUNNING:
+            heartbeat = batch.last_progress_at or batch.created_at
+            if heartbeat < now - _STALL_AFTER_RUNNING:
+                dispatch("batches.tasks.run_generation", batch.pk)
+                rekicked = True
+        elif batch.status == Batch.Status.UPLOADED:
+            if batch.created_at < now - _STALL_AFTER_UPLOADED:
+                dispatch("batches.tasks.run_generation", batch.pk)
+                rekicked = True
+
+        return JsonResponse(
+            {
+                "status": batch.status,
+                "total_count": batch.total_count,
+                "done": batch.items.count(),
+                "needs_review_count": batch.items.filter(needs_review=True).count(),
+                "has_errors": bool(batch.error_log),
+                "rekicked": rekicked,
+            }
+        )

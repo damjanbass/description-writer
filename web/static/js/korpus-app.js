@@ -115,8 +115,43 @@
     Array.prototype.slice.call(document.querySelectorAll('.counts-strip-num')).forEach(countUp);
   }
 
+  /* ---------- batch progress poller ---------- */
+  /* While a batch is UPLOADED/RUNNING, batch_detail.html renders an element
+     carrying [data-batch-status-url]. Poll the org-scoped status endpoint,
+     update the progress line in place, and reload once the run reaches a
+     terminal state so the full server-rendered result (artifacts, counts,
+     filters) appears. The endpoint doubles as the stall backstop server-side,
+     so merely having this page open also self-heals a stuck batch. */
+  function bindBatchProgress() {
+    var holder = document.querySelector('[data-batch-status-url]');
+    if (!holder || !window.fetch) return;
+    var url = holder.getAttribute('data-batch-status-url');
+    var line = holder.querySelector('[data-batch-progress]');
+    var timer = setInterval(poll, 4000);
+    function poll() {
+      fetch(url, { credentials: 'same-origin' })
+        .then(function (res) {
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          return res.json();
+        })
+        .then(function (data) {
+          if (data.status !== 'running' && data.status !== 'uploaded') {
+            clearInterval(timer);
+            window.location.reload();
+            return;
+          }
+          if (line && data.total_count > 0) {
+            line.textContent =
+              'obrađeno ' + data.done + ' od ' + data.total_count + ' proizvoda';
+          }
+        })
+        .catch(function () { /* transient poll failure: keep trying */ });
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     bindToasts();
     bindCountUp();
+    bindBatchProgress();
   });
 })();

@@ -137,6 +137,44 @@ Q_CLUSTER = {
 }
 
 # ---------------------------------------------------------------------------
+# Background task dispatch (batches.dispatch)
+# ---------------------------------------------------------------------------
+# How batches.dispatch.dispatch() hands background work off:
+#   "django_q" - enqueue via django_q2; a dedicated qcluster worker process
+#                consumes the queue (the VPS/compose deployment). Default.
+#   "sync"     - run the task inline in the calling process (dev + tests;
+#                the same semantics dev.py's Q_CLUSTER sync=True gives
+#                django_q).
+#   "qstash"   - publish an HTTPS message to Upstash QStash, which calls
+#                back into POST /api/tasks/run. For serverless deployments
+#                (Vercel): no persistent worker process can exist there, so
+#                the "queue" is an external HTTP callback service and each
+#                invocation processes one bounded chunk of work.
+KORPUS_TASK_DISPATCH = os.environ.get("KORPUS_TASK_DISPATCH", "django_q")
+
+# Wall-clock budget (seconds) a chunked task may spend before persisting
+# progress and re-dispatching a continuation of itself. None = unlimited
+# single-pass (right for VPS workers and dev). Serverless settings pin this
+# safely under the platform's function time limit.
+_task_budget = os.environ.get("KORPUS_TASK_TIME_BUDGET_SECONDS", "")
+KORPUS_TASK_TIME_BUDGET_SECONDS = int(_task_budget) if _task_budget else None
+
+# Shared secret authenticating machine callbacks to POST /api/tasks/run
+# (constant-time compared in batches.views_tasks). Empty = the endpoint is
+# disabled (404), so deployments that never dispatch over HTTP expose
+# nothing extra.
+KORPUS_TASK_TOKEN = os.environ.get("KORPUS_TASK_TOKEN", "")
+
+# Public base URL of THIS deployment (scheme + host, no trailing slash) that
+# QStash should deliver task callbacks to. Only read in "qstash" mode.
+KORPUS_TASK_CALLBACK_BASE = os.environ.get("KORPUS_TASK_CALLBACK_BASE", "").rstrip("/")
+
+# Upstash QStash credentials/endpoint. QSTASH_URL exists so tests (and any
+# future self-hosted QStash) can point the publisher elsewhere.
+QSTASH_TOKEN = os.environ.get("QSTASH_TOKEN", "")
+QSTASH_URL = os.environ.get("QSTASH_URL", "https://qstash.upstash.io")
+
+# ---------------------------------------------------------------------------
 # Cache
 # ---------------------------------------------------------------------------
 # django-ratelimit needs a shared cache backend (not per-process LocMem) so

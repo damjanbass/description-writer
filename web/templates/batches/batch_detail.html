@@ -8,9 +8,6 @@
 
 {% block extra_head %}
 <link rel="stylesheet" href="{% static 'css/batches.css' %}">
-{% if batch.status == "running" or batch.status == "uploaded" %}
-<meta http-equiv="refresh" content="5">
-{% endif %}
 {% endblock %}
 
 {% block org_name %}<span class="muted">{{ org.name }}</span>{% endblock %}
@@ -31,7 +28,12 @@
 </div>
 
 {% if batch.status == "running" or batch.status == "uploaded" %}
-<p class="muted"><span class="spinner" aria-hidden="true"></span>Generisanje je u toku — stranica se osvežava automatski.</p>
+{# korpus-app.js polls the status endpoint off this data attribute, updates #}
+{# the progress line in place, and reloads on a terminal state. #}
+<p class="muted" data-batch-status-url="{% url 'batches:status' org_slug=org.slug pk=batch.pk %}">
+  <span class="spinner" aria-hidden="true"></span>
+  Generisanje je u toku — <span data-batch-progress>obrađeno {{ counts.total }} od {{ batch.total_count }} proizvoda</span>.
+</p>
 {% endif %}
 
 {% if batch.error_log %}

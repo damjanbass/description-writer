@@ -1,31 +1,55 @@
-"""Background tasks for the batches app, run via django_q2 `async_task`.
+"""Background tasks for the batches app, handed off via `batches.dispatch`.
 
-Both functions below are plain, synchronously-callable Python functions —
-that is django_q2's contract for a task. Dev settings run them inline
-(`Q_CLUSTER["sync"] = True` in config/settings/dev.py), so calling
+Both functions below are plain, synchronously-callable Python functions --
+that is the contract every dispatch mode shares. Dev settings run them
+inline (`KORPUS_TASK_DISPATCH = "sync"`), so calling
 `run_generation(batch.pk)` directly (as the tests do) is identical to what
-`async_task("batches.tasks.run_generation", batch.pk)` does in views.py. This
+`dispatch("batches.tasks.run_generation", batch.pk)` does in views.py. This
 is the only place `batches` drives the stdlib pipeline engine end to end for
 a saved `Batch`; the model<->dataclass field mapping itself lives in
 `bridge.py`.
+
+CHUNKED EXECUTION. Serverless platforms cap one invocation at a few
+minutes, while a real batch is hours of sequential LLM calls. Both tasks
+therefore run against a wall-clock budget
+(`settings.KORPUS_TASK_TIME_BUDGET_SECONDS`; None = unlimited, the VPS/dev
+single-pass behavior): when the budget runs out with work left, the task
+persists progress and dispatches a continuation of itself, and each
+continuation resumes exactly where the DB says work stopped. Recovery from
+a crashed chunk -- one that died before dispatching its continuation -- is
+the status endpoint's stall backstop (views.BatchStatusView), keyed off
+`Batch.last_progress_at`.
+
+Idempotency over locking: `ReviewItem`'s (batch, product_id) unique
+constraint makes per-product creation naturally idempotent, so a rare
+duplicate runner (double delivery, a retry racing a slow chunk) wastes at
+most a few duplicate LLM calls and never corrupts state. That is
+deliberately preferred over a lease/token protocol here.
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
+import shutil
+import tempfile
+import time
+from pathlib import Path
 
 from connections.models import ConnectorCredential
+from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from connectors.woocommerce import WooCommerceConnector
 from pipeline.generation import DEFAULT_MODEL, AnthropicProvider, FakeProvider
 from pipeline.ingest import read_products
-from pipeline.runner import BatchProcessingError, run_batch, write_outputs
+from pipeline.runner import process_product
 from pipeline.types import DualScript, Script
 
-from .bridge import build_review_items
+from .bridge import review_item_kwargs_from_result
+from .dispatch import dispatch
 from .models import AuditLog, Batch, ReviewItem
 
 logger = logging.getLogger(__name__)
@@ -44,7 +68,7 @@ _FAKE_RESPONSE = (
 # Caps on how much text lands in persisted error/detail fields. A second line
 # of defense (alongside never interpolating credential/API-key values into
 # these strings in the first place) against a pathological error message or a
-# huge BatchProcessingError failure list bloating a text column.
+# huge failure list bloating a text column.
 _ERROR_LOG_MAX_CHARS = 10_000
 _PUBLISH_ERROR_MAX_CHARS = 1_000
 
@@ -58,20 +82,51 @@ def _max_products_per_batch() -> int:
     return int(os.environ.get("KORPUS_MAX_PRODUCTS_PER_BATCH", "20000"))
 
 
-def run_generation(batch_id: int) -> None:
-    """Ingest -> generate -> correct -> write artifacts -> ReviewItems.
+def _load_records(batch: Batch):
+    """Copy `batch.source_file` to a local temp path and ingest it.
 
-    Guard: only runs from `Batch.Status.UPLOADED`; any other status (already
-    running/completed/failed) is a no-op, so calling this twice on the same
-    batch is safe. On success: writes `descriptions.csv` +
-    `provenance/*.json` under `batch.artifacts_dir`, bulk-creates one
-    `ReviewItem` per product (via bridge.build_review_items), sets
-    total_count/needs_review_count, and marks the batch COMPLETED. A partial
-    failure (`BatchProcessingError`) still completes the batch using
-    whatever `partial_results` succeeded, recording the per-product failures
-    into `error_log`. Any other, unexpected exception marks the batch FAILED
-    with a safe (no-secrets) error message -- the batch is left in a
-    consistent, terminal DB state either way; nothing is re-raised.
+    `pipeline.ingest.read_products` takes a filesystem path only -- it
+    dispatches on the file extension and opens the csv/zip itself -- while
+    the configured storage may be non-filesystem (batches.dbstorage on
+    serverless). Copying through a NamedTemporaryFile keeps the engine
+    stdlib-pure and works identically on every storage backend. The suffix
+    must survive the copy because ingest dispatches on it.
+    """
+    suffix = Path(batch.source_file.name).suffix or ".csv"
+    with batch.source_file.open("rb") as source:
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            shutil.copyfileobj(source, tmp)
+            tmp_path = tmp.name
+    try:
+        return read_products(tmp_path)
+    finally:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_path)
+
+
+def run_generation(batch_id: int) -> None:
+    """Ingest -> generate -> correct -> ReviewItems, in resumable chunks.
+
+    Guard: a first entry only proceeds from `Batch.Status.UPLOADED` -- the
+    atomic compare-and-swap to RUNNING below means a double enqueue can't
+    double-claim -- and a continuation entry only proceeds from RUNNING.
+    COMPLETED/FAILED batches are a no-op, so calling this any number of
+    times is safe.
+
+    Every product that generates successfully becomes a `ReviewItem`
+    immediately (not batched at the end), which is what makes the run
+    resumable: a continuation just skips product_ids that already have
+    rows. First record wins for duplicate product_ids within one catalog;
+    later duplicates are skipped (the old all-at-once bulk_create would
+    have failed the whole batch on that input). Per-product engine failures
+    append to `error_log` (bounded) and never abort the run -- the same
+    "never abort on one bad record" contract `pipeline.runner.run_batch`
+    has. On budget exhaustion a continuation is dispatched; on completion
+    the batch flips RUNNING -> COMPLETED via a second CAS, so exactly one
+    runner writes the final counts and the single GENERATE audit row. Any
+    unexpected exception marks the batch FAILED with a safe (no-secrets)
+    message -- the batch lands in a consistent, terminal DB state either
+    way; nothing is re-raised.
     """
     try:
         batch = Batch.objects.select_related("organization").get(pk=batch_id)
@@ -79,26 +134,25 @@ def run_generation(batch_id: int) -> None:
         logger.warning("run_generation: Batch %s does not exist.", batch_id)
         return
 
-    # Atomic compare-and-swap on the status: a plain read-check-then-save
-    # would let two concurrent runs (double enqueue, django_q retry) both see
-    # UPLOADED and both generate -- double LLM spend and an IntegrityError on
-    # the second bulk_create. The single UPDATE ... WHERE status='uploaded'
-    # guarantees exactly one runner wins.
     claimed = Batch.objects.filter(
         pk=batch_id, status=Batch.Status.UPLOADED
-    ).update(status=Batch.Status.RUNNING)
-    if not claimed:
+    ).update(status=Batch.Status.RUNNING, last_progress_at=timezone.now())
+    if not claimed and batch.status != Batch.Status.RUNNING:
         logger.info(
-            "run_generation: Batch %s is %s, not uploaded; skipping.",
+            "run_generation: Batch %s is %s, not uploaded/running; skipping.",
             batch_id,
             batch.status,
         )
         return
     batch.status = Batch.Status.RUNNING
 
-    error_log = ""
+    started = time.monotonic()
+    budget = settings.KORPUS_TASK_TIME_BUDGET_SECONDS
+    # A continuation picks the log up where the previous chunk left it.
+    error_log = batch.error_log
+
     try:
-        records = read_products(batch.source_file.path)
+        records = _load_records(batch)
 
         if len(records) > _max_products_per_batch():
             raise ValueError(
@@ -118,43 +172,91 @@ def run_generation(batch_id: int) -> None:
 
         source_script = Script(batch.source_script)
 
-        try:
-            results = run_batch(records, provider, source_script=source_script)
-        except BatchProcessingError as exc:
-            results = exc.partial_results
-            error_log = "\n".join(
-                f"{failure.record.product_id}: {failure.error}" for failure in exc.failures
-            )[:_ERROR_LOG_MAX_CHARS]
+        # First record wins per product_id (see docstring).
+        unique_records = []
+        seen: set[str] = set()
+        for record in records:
+            if record.product_id in seen:
+                continue
+            seen.add(record.product_id)
+            unique_records.append(record)
 
-        write_outputs(results, batch.artifacts_dir)
-        ReviewItem.objects.bulk_create(build_review_items(batch, results))
+        # Progress denominator for the status endpoint. Snapped to the
+        # actually-generated item count at completion (failures excluded),
+        # preserving the pre-chunking total_count semantics.
+        if batch.total_count != len(unique_records):
+            Batch.objects.filter(pk=batch_id).update(
+                total_count=len(unique_records)
+            )
 
-        batch.total_count = len(results)
-        batch.needs_review_count = sum(1 for result in results if result.needs_review)
-        batch.status = Batch.Status.COMPLETED
-        batch.error_log = error_log
-        batch.finished_at = timezone.now()
-        batch.save(
-            update_fields=[
-                "status", "total_count", "needs_review_count", "error_log", "finished_at",
-            ]
+        done_ids = set(batch.items.values_list("product_id", flat=True))
+        remaining = [r for r in unique_records if r.product_id not in done_ids]
+
+        for record in remaining:
+            if budget is not None and time.monotonic() - started >= budget:
+                Batch.objects.filter(pk=batch_id).update(
+                    error_log=error_log, last_progress_at=timezone.now()
+                )
+                dispatch("batches.tasks.run_generation", batch_id)
+                logger.info(
+                    "run_generation: Batch %s chunk budget reached; "
+                    "continuation dispatched.",
+                    batch_id,
+                )
+                return
+
+            try:
+                result = process_product(
+                    record, provider, source_script=source_script
+                )
+            except Exception as exc:  # noqa: BLE001 - one bad record must not abort the batch
+                line = f"{record.product_id}: {exc}"
+                error_log = (
+                    f"{error_log}\n{line}" if error_log else line
+                )[:_ERROR_LOG_MAX_CHARS]
+            else:
+                try:
+                    ReviewItem.objects.create(
+                        **review_item_kwargs_from_result(batch, result)
+                    )
+                except IntegrityError:
+                    # A duplicate runner (double delivery / retry racing a
+                    # slow chunk) generated this product concurrently and
+                    # its row won; nothing to record.
+                    pass
+            Batch.objects.filter(pk=batch_id).update(
+                error_log=error_log, last_progress_at=timezone.now()
+            )
+
+        total = batch.items.count()
+        needs_review = batch.items.filter(needs_review=True).count()
+        completed = Batch.objects.filter(
+            pk=batch_id, status=Batch.Status.RUNNING
+        ).update(
+            status=Batch.Status.COMPLETED,
+            total_count=total,
+            needs_review_count=needs_review,
+            error_log=error_log,
+            finished_at=timezone.now(),
         )
-        AuditLog.objects.create(
-            organization=batch.organization,
-            actor=batch.created_by,
-            action=AuditLog.Action.GENERATE,
-            batch=batch,
-            detail={
-                "total_count": batch.total_count,
-                "needs_review_count": batch.needs_review_count,
-            },
-        )
+        if completed:
+            AuditLog.objects.create(
+                organization=batch.organization,
+                actor=batch.created_by,
+                action=AuditLog.Action.GENERATE,
+                batch=batch,
+                detail={
+                    "total_count": total,
+                    "needs_review_count": needs_review,
+                },
+            )
     except Exception as exc:  # noqa: BLE001 - a bad batch must not crash the task runner
         logger.exception("run_generation: Batch %s failed.", batch_id)
-        batch.status = Batch.Status.FAILED
-        batch.error_log = str(exc)[:_ERROR_LOG_MAX_CHARS]
-        batch.finished_at = timezone.now()
-        batch.save(update_fields=["status", "error_log", "finished_at"])
+        Batch.objects.filter(pk=batch_id).update(
+            status=Batch.Status.FAILED,
+            error_log=str(exc)[:_ERROR_LOG_MAX_CHARS],
+            finished_at=timezone.now(),
+        )
 
 
 def publish_batch(
@@ -176,11 +278,14 @@ def publish_batch(
     loses the fact that earlier items already published, and a per-item push
     failure (`publish_error` + an audit row) never aborts the rest of the
     run -- the same "never abort on one bad record" contract
-    `pipeline.runner.run_batch` and the CLI's `publish` command use.
+    `pipeline.runner.run_batch` and the CLI's `publish` command use. That
+    per-item design is also what makes chunking safe: on budget exhaustion
+    a continuation is dispatched with identical arguments, and it simply
+    re-queries what is still APPROVED.
 
-    Returns `{"published": n, "failed": n, "skipped": n}`; `skipped` counts
-    items that were never APPROVED (pending/rejected/already-published) and
-    so were never touched.
+    Returns `{"published": n, "failed": n, "skipped": n}` **for this chunk
+    only** (informational -- nothing consumes it); `skipped` counts items
+    that were not APPROVED when this chunk started.
     """
     batch = Batch.objects.select_related("organization").get(pk=batch_id)
 
@@ -220,6 +325,9 @@ def publish_batch(
     )
     script = Script(publish_script)
 
+    started = time.monotonic()
+    budget = settings.KORPUS_TASK_TIME_BUDGET_SECONDS
+
     published = 0
     failed = 0
     skipped = batch.items.exclude(status=ReviewItem.Status.APPROVED).count()
@@ -228,6 +336,21 @@ def publish_batch(
     )
 
     for item_id in approved_ids:
+        if budget is not None and time.monotonic() - started >= budget:
+            dispatch(
+                "batches.tasks.publish_batch",
+                batch_id,
+                credential_id,
+                publish_script,
+                actor_id,
+            )
+            logger.info(
+                "publish_batch: Batch %s chunk budget reached; "
+                "continuation dispatched.",
+                batch_id,
+            )
+            break
+
         with transaction.atomic():
             item = ReviewItem.objects.select_for_update().filter(pk=item_id).first()
             if item is None or item.status != ReviewItem.Status.APPROVED:

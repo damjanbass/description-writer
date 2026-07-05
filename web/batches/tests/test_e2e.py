@@ -251,7 +251,9 @@ class BatchJourneyE2ETest(TestCase):
         self.assertEqual(csv_response.status_code, 200)
         self.assertIn("attachment", csv_response["Content-Disposition"])
         self.assertIn("descriptions.csv", csv_response["Content-Disposition"])
-        csv_rows = self._parse_csv(b"".join(csv_response.streaming_content))
+        # Plain HttpResponse now: the CSV is rendered from ReviewItem rows on
+        # demand (bridge.export_descriptions_csv), not streamed off disk.
+        csv_rows = self._parse_csv(csv_response.content)
         self.assertEqual({row["product_id"] for row in csv_rows}, {"1", "2", "3"})
 
         queue_response = self.client.get(self.url("artifact", pk=batch.pk, kind="queue"))

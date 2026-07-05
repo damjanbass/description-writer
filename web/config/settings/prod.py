@@ -48,24 +48,64 @@ CSRF_TRUSTED_ORIGINS = [
 # ---------------------------------------------------------------------------
 # Database — Postgres
 # ---------------------------------------------------------------------------
-# Fail loud on a missing password rather than silently connecting with "" —
-# consistent with how SECRET_KEY / ALLOWED_HOSTS are enforced above.
-_postgres_password = os.environ.get("POSTGRES_PASSWORD")
-if not _postgres_password:
-    raise RuntimeError(
-        "POSTGRES_PASSWORD environment variable is required in production."
-    )
+# Two mutually exclusive configuration shapes, checked in this order:
+#
+# 1. DATABASE_URL — a single connection URL, the shape managed-Postgres
+#    providers hand out (Neon via the Vercel Marketplace injects exactly
+#    this). Parsed with stdlib urllib.parse — deliberately no dj-database-url
+#    dependency for one URL split. Neon's pooled URL goes through pgbouncer
+#    in transaction mode, so a connection must never be reused across
+#    requests (CONN_MAX_AGE=0) and server-side cursors are unsafe (a cursor
+#    can outlive "its" backend connection) — both pinned here. TLS is
+#    required by default; a provider that needs otherwise can say so in the
+#    URL's own ?sslmode= query parameter.
+#
+# 2. Discrete POSTGRES_* variables — the compose/VPS deployment shape,
+#    unchanged. Fails loud on a missing password rather than silently
+#    connecting with "" — consistent with how SECRET_KEY / ALLOWED_HOSTS are
+#    enforced above.
+_database_url = os.environ.get("DATABASE_URL", "")
+if _database_url:
+    from urllib.parse import parse_qsl, unquote, urlsplit
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("POSTGRES_DB", "korpus"),
-        "USER": os.environ.get("POSTGRES_USER", "korpus"),
-        "PASSWORD": _postgres_password,
-        "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
-        "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+    _parsed = urlsplit(_database_url)
+    if _parsed.scheme not in ("postgres", "postgresql"):
+        raise RuntimeError(
+            "DATABASE_URL must be a postgres:// or postgresql:// URL "
+            f"(got scheme {_parsed.scheme!r})."
+        )
+    _query = dict(parse_qsl(_parsed.query))
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": unquote(_parsed.path.lstrip("/")),
+            "USER": unquote(_parsed.username or ""),
+            "PASSWORD": unquote(_parsed.password or ""),
+            "HOST": _parsed.hostname or "",
+            "PORT": str(_parsed.port) if _parsed.port else "",
+            "CONN_MAX_AGE": 0,
+            "DISABLE_SERVER_SIDE_CURSORS": True,
+            "OPTIONS": {"sslmode": _query.get("sslmode", "require")},
+        }
     }
-}
+else:
+    _postgres_password = os.environ.get("POSTGRES_PASSWORD")
+    if not _postgres_password:
+        raise RuntimeError(
+            "POSTGRES_PASSWORD environment variable is required in production "
+            "(or provide a single DATABASE_URL connection URL instead)."
+        )
+
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ.get("POSTGRES_DB", "korpus"),
+            "USER": os.environ.get("POSTGRES_USER", "korpus"),
+            "PASSWORD": _postgres_password,
+            "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
+            "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+        }
+    }
 
 # ---------------------------------------------------------------------------
 # Security hardening

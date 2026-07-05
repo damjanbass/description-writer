@@ -16,6 +16,7 @@ urlpatterns = [
     path("nova/", views.BatchUploadView.as_view(), name="upload"),
     path("demo/", views.DemoSeedView.as_view(), name="demo"),
     path("<int:pk>/", views.BatchDetailView.as_view(), name="detail"),
+    path("<int:pk>/status.json", views.BatchStatusView.as_view(), name="status"),
     path("<int:pk>/objavi/", views.BatchPublishView.as_view(), name="publish"),
     path(
         "<int:pk>/artefakt/<str:kind>/",

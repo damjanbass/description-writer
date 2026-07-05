@@ -10,12 +10,43 @@ here, so the two schemas can never silently drift apart.
 """
 from __future__ import annotations
 
+import csv
+import io
+
+from pipeline.fsio import neutralize_csv_cell
 from pipeline.review import ReviewItem as PipelineReviewItem
 from pipeline.review import ReviewQueue, ReviewStatus, review_queue_to_json
 from pipeline.types import DualScript, ProductResult
 
 from .models import Batch
 from .models import ReviewItem as DjangoReviewItem
+
+
+def export_descriptions_csv(batch: Batch) -> str:
+    """Render `batch`'s ReviewItems as the downloadable descriptions.csv.
+
+    Same contract as `pipeline.runner.write_outputs`' CSV: identical header
+    order and the same `neutralize_csv_cell` formula-injection defusing on
+    every cell (generated copy and product ids come from untrusted catalog
+    content, and this file's whole purpose is being opened in a spreadsheet).
+    Built from the `ReviewItem` rows — the DB is the source of truth for
+    generated copy — so no filesystem artifact is ever read; serverless
+    deployments have none. Rows come out in `ReviewItem.Meta.ordering`
+    (product_id), like `export_review_queue_json` above.
+    """
+    buffer = io.StringIO(newline="")
+    writer = csv.writer(buffer)
+    writer.writerow(["product_id", "latinica", "cirilica", "needs_review"])
+    for item in batch.items.order_by("product_id"):
+        writer.writerow(
+            [
+                neutralize_csv_cell(item.product_id),
+                neutralize_csv_cell(item.latinica),
+                neutralize_csv_cell(item.cirilica),
+                neutralize_csv_cell(str(item.needs_review)),
+            ]
+        )
+    return buffer.getvalue()
 
 
 def export_review_queue_json(batch: Batch) -> str:

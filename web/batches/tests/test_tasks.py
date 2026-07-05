@@ -1,10 +1,18 @@
 """Tests for batches.tasks: run_generation and publish_batch, the two
-django_q2 background jobs. Dev settings run tasks synchronously
-(Q_CLUSTER["sync"] = True), so calling these functions directly is exactly
-what `async_task("batches.tasks.run_generation", batch.pk)` would do.
+background jobs `batches.dispatch` hands off. Dev settings dispatch every
+task inline (`KORPUS_TASK_DISPATCH = "sync"`), so calling these functions
+directly is exactly what `dispatch("batches.tasks.run_generation", batch.pk)`
+does from views.py.
+
+No filesystem artifacts are involved below: `run_generation` writes
+generated copy straight to `ReviewItem` rows, and descriptions.csv is
+rendered from those rows on demand (`batches.bridge.export_descriptions_csv`)
+rather than read back off disk.
 """
 from __future__ import annotations
 
+import csv
+import io
 import tempfile
 from pathlib import Path
 from unittest import mock
@@ -17,6 +25,7 @@ from django.core.files.base import ContentFile
 from django.test import TestCase, override_settings
 
 from batches import tasks
+from batches.bridge import export_descriptions_csv
 from batches.models import AuditLog, Batch, ReviewItem
 from pipeline.types import Script
 
@@ -89,11 +98,17 @@ class RunGenerationTests(TestCase):
             batch.needs_review_count, sum(1 for item in items if item.needs_review)
         )
 
-        artifacts_dir = batch.artifacts_dir
-        self.assertTrue((artifacts_dir / "descriptions.csv").exists())
-        provenance_dir = artifacts_dir / "provenance"
-        self.assertTrue(provenance_dir.exists())
-        self.assertEqual(len(list(provenance_dir.glob("*.json"))), 2)
+        # descriptions.csv is rendered from these same rows on demand — assert
+        # the export contract (engine header order + one row per product)
+        # instead of any on-disk artifact; provenance detail was asserted on
+        # the rows above.
+        payload = export_descriptions_csv(batch)
+        rows = list(csv.reader(io.StringIO(payload)))
+        self.assertEqual(
+            rows[0], ["product_id", "latinica", "cirilica", "needs_review"]
+        )
+        self.assertEqual(len(rows), 3)  # header + 2 products
+        self.assertEqual([row[0] for row in rows[1:]], ["1", "2"])
 
         log = AuditLog.objects.get(action=AuditLog.Action.GENERATE, batch=batch)
         self.assertEqual(log.actor, self.user)
@@ -108,14 +123,26 @@ class RunGenerationTests(TestCase):
         self.assertIn("per-batch limit", batch.error_log)
         self.assertEqual(ReviewItem.objects.filter(batch=batch).count(), 0)
 
-    def test_status_claim_is_atomic_compare_and_swap(self):
+    def test_running_batch_resumes_as_continuation(self):
         batch = _make_uploaded_batch(self.org, self.user)
-        # Simulate a concurrent runner having already claimed the batch: the
-        # UPDATE ... WHERE status='uploaded' must claim zero rows and no-op.
+        # A RUNNING batch is exactly what a continuation chunk (or a stall
+        # re-kick) sees: run_generation must resume it rather than skip it.
+        # Double generation is prevented by the per-product
+        # (batch, product_id) uniqueness, not by the status guard.
         Batch.objects.filter(pk=batch.pk).update(status=Batch.Status.RUNNING)
         tasks.run_generation(batch.pk)
         batch.refresh_from_db()
-        self.assertEqual(batch.status, Batch.Status.RUNNING)  # untouched
+        self.assertEqual(batch.status, Batch.Status.COMPLETED)
+        self.assertEqual(ReviewItem.objects.filter(batch=batch).count(), 2)
+
+    def test_failed_batch_is_never_rerun(self):
+        batch = _make_uploaded_batch(self.org, self.user)
+        # Terminal states stay terminal: only UPLOADED (first claim) and
+        # RUNNING (continuation) may generate.
+        Batch.objects.filter(pk=batch.pk).update(status=Batch.Status.FAILED)
+        tasks.run_generation(batch.pk)
+        batch.refresh_from_db()
+        self.assertEqual(batch.status, Batch.Status.FAILED)  # untouched
         self.assertEqual(ReviewItem.objects.filter(batch=batch).count(), 0)
 
     def test_run_generation_bad_file_marks_failed_without_crashing(self):

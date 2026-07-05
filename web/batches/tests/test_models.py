@@ -5,7 +5,6 @@ append-only AuditLog trail each transition writes.
 from __future__ import annotations
 
 from accounts.models import Organization
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
@@ -172,19 +171,6 @@ class ReviewItemUniqueConstraintTests(TestCase):
 
 
 class BatchModelTests(TestCase):
-    def test_artifacts_dir_layout(self):
-        org = _make_org(slug="korpus-shop")
-        batch = _make_batch(org)
-        expected = (
-            settings.MEDIA_ROOT
-            / "orgs"
-            / "korpus-shop"
-            / "batches"
-            / str(batch.pk)
-            / "artifacts"
-        )
-        self.assertEqual(batch.artifacts_dir, expected)
-
     def test_default_status_and_ordering(self):
         org = _make_org()
         batch = _make_batch(org, name="First")

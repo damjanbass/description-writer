@@ -13,6 +13,9 @@ urlpatterns = [
     path("app/vodic/", GuideView.as_view(), name="guide"),
     path("app/<slug:org_slug>/batches/", include("batches.urls")),
     path("api/", include("leads.urls")),
+    # Machine callback for dispatched background work (QStash). Token-gated
+    # in the view; 404s entirely when KORPUS_TASK_TOKEN is unset.
+    path("api/tasks/", include("batches.api_urls")),
     # --- Auth (Django's built-in views, minimal Korpus-styled templates) ---
     path(
         "app/login/",

@@ -14,8 +14,6 @@ not change without coordinating across agents.
 """
 from __future__ import annotations
 
-from pathlib import Path
-
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
@@ -71,29 +69,17 @@ class Batch(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(null=True, blank=True)
+    # Bumped as chunked generation makes progress (see tasks.run_generation).
+    # Lets the status endpoint detect a stalled RUNNING batch — a chunk that
+    # crashed without dispatching its continuation — and re-kick it. NULL on
+    # batches that never started running.
+    last_progress_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
         return self.name
-
-    @property
-    def artifacts_dir(self) -> Path:
-        """Filesystem path (under MEDIA_ROOT) for this batch's write_outputs.
-
-        `pipeline.runner.write_outputs` writes descriptions.csv and
-        provenance/*.json directly into this directory; it is created on
-        first write (write_outputs itself does the mkdir).
-        """
-        return (
-            Path(settings.MEDIA_ROOT)
-            / "orgs"
-            / self.organization.slug
-            / "batches"
-            / str(self.pk)
-            / "artifacts"
-        )
 
 
 class ReviewItem(models.Model):
@@ -253,3 +239,24 @@ class AuditLog(models.Model):
 
     def __str__(self) -> str:
         return f"{self.action} @ {self.created_at:%Y-%m-%d %H:%M:%S}"
+
+
+class StoredFile(models.Model):
+    """One uploaded file's bytes, backing `batches.dbstorage.DatabaseStorage`.
+
+    Serverless deployments have no persistent filesystem, so the default
+    file storage there keeps uploads in Postgres instead of on disk. Rows
+    stay small by platform fiat — Vercel caps request bodies at ~4.5 MB,
+    well under the 50 MB form-level cap — and only `Batch.source_file` uses
+    the default storage. `name` is the storage-visible identifier: exactly
+    the string the FileField persists in its own column (the
+    `batch_upload_path` shape, e.g. "orgs/<slug>/batches/<filename>").
+    """
+
+    name = models.CharField(max_length=500, unique=True)
+    content = models.BinaryField()
+    size = models.BigIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return self.name
